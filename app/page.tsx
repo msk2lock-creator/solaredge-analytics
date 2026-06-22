@@ -22,6 +22,11 @@ const dailyData = [
 export default function SolarEdgeApp() {
   const [currentView, setCurrentView] = useState('login');
   const [activeTab, setActiveTab] = useState(1);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  // 年月の選択用の状態（デフォルトは2026年4月）
+  const [selectedYear, setSelectedYear] = useState('2026');
+  const [selectedMonth, setSelectedMonth] = useState('4');
 
   // 1. ログイン画面（モダンデザイン）
   if (currentView === 'login') {
@@ -66,31 +71,91 @@ export default function SolarEdgeApp() {
     );
   }
 
-  // 2. ダッシュボード画面（元の3つのグラフ）
+  // 2. アップロード（データインポート）画面
+  if (currentView === 'upload') {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <header className="mb-8 flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-800">データインポート</h1>
+          <button onClick={() => setCurrentView('dashboard')} className="text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors">
+            ← ダッシュボードへ戻る
+          </button>
+        </header>
+        
+        <div className="max-w-3xl mx-auto bg-white p-10 rounded-2xl shadow-sm border border-gray-100 text-center mt-12 animate-in fade-in duration-500">
+          <h2 className="text-xl font-bold mb-6 text-gray-800">SolarEdge CSVデータのアップロード</h2>
+          <div className="border-2 border-dashed border-gray-300 rounded-2xl p-12 mb-6 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer">
+            <svg className="mx-auto h-12 w-12 text-gray-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+            <p className="text-gray-600 font-medium">CSVファイルをここにドラッグ＆ドロップ</p>
+            <p className="text-sm text-gray-400 mt-2">またはクリックしてファイルを選択</p>
+          </div>
+          <button 
+            onClick={() => {
+              setIsUploading(true);
+              setTimeout(() => { setIsUploading(false); setCurrentView('dashboard'); }, 1500);
+            }}
+            disabled={isUploading}
+            className={`px-8 py-3.5 rounded-xl font-bold text-white transition-all shadow-sm ${isUploading ? 'bg-green-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700 active:scale-[0.98]'}`}
+          >
+            {isUploading ? 'データを解析中...' : 'アップロードして分析を開始'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. ダッシュボード画面
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <header className="mb-8 flex justify-between items-center">
+      <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4 animate-in slide-in-from-top-4 duration-500">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">発電分析ダッシュボード</h1>
-          <p className="text-sm text-gray-500 mt-1">対象データ: 2026年4月</p>
+          <div className="flex items-center gap-2 mt-3">
+            <span className="text-sm font-medium text-gray-500">対象データ:</span>
+            <select 
+              value={selectedYear} 
+              onChange={(e) => setSelectedYear(e.target.value)}
+              className="border border-gray-300 rounded-lg text-sm px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium text-gray-700 shadow-sm cursor-pointer"
+            >
+              <option value="2024">2024年</option>
+              <option value="2025">2025年</option>
+              <option value="2026">2026年</option>
+            </select>
+            <select 
+              value={selectedMonth} 
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="border border-gray-300 rounded-lg text-sm px-3 py-1.5 outline-none focus:ring-2 focus:ring-blue-500 bg-white font-medium text-gray-700 shadow-sm cursor-pointer"
+            >
+              {[...Array(12)].map((_, i) => (
+                <option key={i+1} value={i+1}>{i+1}月</option>
+              ))}
+            </select>
+          </div>
         </div>
-        <div className="flex gap-4">
-          <button onClick={() => setCurrentView('login')} className="text-sm text-gray-500 hover:text-gray-700 py-2">ログアウト</button>
+        <div className="flex gap-4 items-center">
+          <button 
+            onClick={() => setCurrentView('upload')} 
+            className="flex items-center gap-2 bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+            データインポート
+          </button>
+          <button onClick={() => setCurrentView('login')} className="text-sm font-medium text-gray-500 hover:text-gray-800 py-2 transition-colors">ログアウト</button>
         </div>
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <p className="text-sm text-gray-500 mb-1">当月総発電量</p>
-          <p className="text-3xl font-bold text-gray-800">1.84 <span className="text-base font-normal text-gray-500">MWh</span></p>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm font-medium text-gray-500 mb-1">当月総発電量</p>
+          <p className="text-3xl font-bold text-gray-800">1.84 <span className="text-base font-medium text-gray-500">MWh</span></p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <p className="text-sm text-gray-500 mb-1">当月総消費量</p>
-          <p className="text-3xl font-bold text-gray-800">7.74 <span className="text-base font-normal text-gray-500">MWh</span></p>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm font-medium text-gray-500 mb-1">当月総消費量</p>
+          <p className="text-3xl font-bold text-gray-800">7.74 <span className="text-base font-medium text-gray-500">MWh</span></p>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <p className="text-sm text-gray-500 mb-1">電力自給率</p>
-          <p className="text-3xl font-bold text-blue-600">23.7 <span className="text-base font-normal text-gray-500">%</span></p>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm font-medium text-gray-500 mb-1">電力自給率</p>
+          <p className="text-3xl font-bold text-blue-600">23.7 <span className="text-base font-medium text-gray-500">%</span></p>
         </div>
       </div>
 
@@ -100,8 +165,8 @@ export default function SolarEdgeApp() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'
+              className={`whitespace-nowrap py-4 px-1 border-b-2 font-bold text-sm transition-colors ${
+                activeTab === tab ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-800'
               }`}
             >
               {tab === 1 && '① 消費電力データ'}
@@ -112,7 +177,7 @@ export default function SolarEdgeApp() {
         </nav>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 h-[500px]">
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 h-[500px]">
         {activeTab === 1 && (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={dailyData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
@@ -121,8 +186,8 @@ export default function SolarEdgeApp() {
               <YAxis />
               <Tooltip />
               <Legend />
-              <Bar dataKey="generation" name="発電（太陽光から）" stackId="a" fill="#f97316" />
-              <Bar dataKey="fromGrid" name="買電（系統から）" stackId="a" fill="#3b82f6" />
+              <Bar dataKey="generation" name="発電（太陽光から）" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="fromGrid" name="買電（系統から）" stackId="a" fill="#3b82f6" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -137,7 +202,7 @@ export default function SolarEdgeApp() {
               <Tooltip />
               <Legend />
               <Area yAxisId="right" type="monotone" dataKey="sunHours" name="日照時間" fill="#86efac" stroke="#22c55e" opacity={0.5} />
-              <Bar yAxisId="left" dataKey="generation" name="発電量" fill="#f97316" barSize={30} />
+              <Bar yAxisId="left" dataKey="generation" name="発電量" fill="#f97316" barSize={30} radius={[4, 4, 0, 0]} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
