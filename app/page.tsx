@@ -110,6 +110,8 @@ export default function SolarEdgeApp() {
       <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4 animate-in slide-in-from-top-4 duration-500">
         <div>
           <h1 className="text-2xl font-bold text-gray-800">発電分析ダッシュボード</h1>
+          
+          {/* 追加：年月選択プルダウン */}
           <div className="flex items-center gap-2 mt-3">
             <span className="text-sm font-medium text-gray-500">対象データ:</span>
             <select 
@@ -132,7 +134,9 @@ export default function SolarEdgeApp() {
             </select>
           </div>
         </div>
+
         <div className="flex gap-4 items-center">
+          {/* 追加：データインポートボタン */}
           <button 
             onClick={() => setCurrentView('upload')} 
             className="flex items-center gap-2 bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm"
