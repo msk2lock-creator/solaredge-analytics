@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Area, ScatterChart, Scatter, Line
+  ComposedChart, Area, ScatterChart, Scatter, Line, ReferenceLine
 } from 'recharts';
 
 // 日次モックデータ（4月1日〜4月10日）
@@ -35,9 +35,35 @@ const monthlyComparisonData = [
   { month: '12月', sim: 3637, actual: null },
 ];
 
+// PDFから抽出した「費用対効果推定表」と実績のモックデータ（単位：千円）
+// 実績は現在3年目で、シミュレーションより少し良いペースで回収できている設定
+const roiComparisonData = [
+  { year: '0年', sim: -10000, actual: -10000 },
+  { year: '1年', sim: -8547, actual: -8200 },
+  { year: '2年', sim: -7099, actual: -6500 },
+  { year: '3年', sim: -5658, actual: -5000 },
+  { year: '4年', sim: -4223, actual: null },
+  { year: '5年', sim: -2794, actual: null },
+  { year: '6年', sim: -1371, actual: null },
+  { year: '7年', sim: 46, actual: null }, // 6年11ヶ月で初期投資回収
+  { year: '8年', sim: 1457, actual: null },
+  { year: '9年', sim: 2861, actual: null },
+  { year: '10年', sim: 4260, actual: null },
+  { year: '11年', sim: 5652, actual: null },
+  { year: '12年', sim: 7038, actual: null },
+  { year: '13年', sim: 8418, actual: null },
+  { year: '14年', sim: 9793, actual: null },
+  { year: '15年', sim: 11160, actual: null },
+  { year: '16年', sim: 12522, actual: null },
+  { year: '17年', sim: 13878, actual: null },
+  { year: '18年', sim: 15228, actual: null },
+  { year: '19年', sim: 16571, actual: null },
+  { year: '20年', sim: 17909, actual: null },
+];
+
 export default function SolarEdgeApp() {
   const [currentView, setCurrentView] = useState('login');
-  const [activeTab, setActiveTab] = useState(4); // 最初から新しいタブを見せる設定
+  const [activeTab, setActiveTab] = useState(5); // 最初から新しい「投資回収」タブを見せる設定
   const [isUploading, setIsUploading] = useState(false);
   
   // 年月の選択用の状態（デフォルトは2026年4月）
@@ -125,7 +151,7 @@ export default function SolarEdgeApp() {
     <div className="min-h-screen bg-gray-50 p-8">
       <header className="mb-8 flex flex-col md:flex-row md:justify-between md:items-center gap-4 animate-in slide-in-from-top-4 duration-500">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">発電分析ダッシュボード</h1>
+          <h1 className="text-2xl font-bold text-gray-800">西岡勝次商店 発電分析ダッシュボード</h1>
           
           <div className="flex items-center gap-2 mt-3">
             <span className="text-sm font-medium text-gray-500">対象データ:</span>
@@ -168,23 +194,24 @@ export default function SolarEdgeApp() {
           <p className="text-3xl font-bold text-gray-800">1.84 <span className="text-base font-medium text-gray-500">MWh</span></p>
         </div>
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
-          <p className="text-sm font-medium text-gray-500 mb-1">当月総消費量</p>
-          <p className="text-3xl font-bold text-gray-800">7.74 <span className="text-base font-medium text-gray-500">MWh</span></p>
-        </div>
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <p className="text-sm font-medium text-gray-500 mb-1">電力自給率</p>
           <p className="text-3xl font-bold text-blue-600">23.7 <span className="text-base font-medium text-gray-500">%</span></p>
         </div>
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <p className="text-sm font-medium text-gray-500 mb-1">CO2排出削減量 (累計実績)</p>
+          <p className="text-3xl font-bold text-green-600">8.2 <span className="text-base font-medium text-gray-500">t-CO2</span></p>
+          <p className="text-xs text-green-600 mt-2 font-medium">杉の木換算: 約376本分</p>
+        </div>
         <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-2xl shadow-sm border border-orange-200">
-          <p className="text-sm font-medium text-orange-700 mb-1">累計投資回収率 (推定)</p>
-          <p className="text-3xl font-bold text-orange-600">41.2 <span className="text-base font-medium text-orange-500">%</span></p>
-          <p className="text-xs text-orange-600 mt-2">目標回収: 6年11ヶ月</p>
+          <p className="text-sm font-medium text-orange-700 mb-1">累計投資回収額 (実績推定)</p>
+          <p className="text-3xl font-bold text-orange-600">5,000 <span className="text-base font-medium text-orange-500">千円</span></p>
+          <p className="text-xs text-orange-600 mt-2 font-medium">進捗率: 50.0% / 導入費10,000千円</p>
         </div>
       </div>
 
       <div className="mb-6 border-b border-gray-200 overflow-x-auto">
         <nav className="-mb-px flex space-x-8 min-w-max">
-          {[1, 2, 3, 4].map((tab) => (
+          {[1, 2, 3, 4, 5].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -195,7 +222,8 @@ export default function SolarEdgeApp() {
               {tab === 1 && '① 消費電力データ'}
               {tab === 2 && '② 発電電力 ＋ 日照時間'}
               {tab === 3 && '③ 日照時間との相関'}
-              {tab === 4 && '④ シミュレーション予実管理'}
+              {tab === 4 && '④ 発電量 シミュレーション比較'}
+              {tab === 5 && '⑤ 投資回収 シミュレーション比較'}
             </button>
           ))}
         </nav>
@@ -246,7 +274,7 @@ export default function SolarEdgeApp() {
         {activeTab === 4 && (
           <div className="h-full flex flex-col">
             <div className="flex justify-between items-center mb-6 px-4">
-              <h3 className="font-bold text-gray-700">月間発電量：事前のシミュレーション値と実際の実績の比較</h3>
+              <h3 className="font-bold text-gray-700">月間発電量：シミュレーション予測と実績の比較</h3>
               <div className="text-sm bg-orange-50 text-orange-700 px-4 py-1.5 rounded-full font-bold border border-orange-200">
                 年間予測: 66,065 kWh
               </div>
@@ -264,6 +292,35 @@ export default function SolarEdgeApp() {
                 <Bar dataKey="actual" name="実績発電量" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={50} />
                 <Area type="monotone" dataKey="sim" name="シミュレーション予測" fill="#f97316" stroke="#ea580c" opacity={0.15} strokeDasharray="5 5" />
                 <Line type="monotone" dataKey="sim" name="予測ライン" stroke="#ea580c" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {activeTab === 5 && (
+          <div className="h-full flex flex-col">
+            <div className="flex justify-between items-center mb-6 px-4">
+              <h3 className="font-bold text-gray-700">費用対効果（投資回収）：シミュレーション予測と実績の比較</h3>
+              <div className="text-sm bg-blue-50 text-blue-700 px-4 py-1.5 rounded-full font-bold border border-blue-200">
+                目標 採算年数: 6年11ヶ月
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={roiComparisonData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="year" />
+                <YAxis 
+                  tickFormatter={(value) => `${value.toLocaleString()}`}
+                  domain={[-12000, 20000]}
+                />
+                <Tooltip 
+                  formatter={(value) => [`${Number(value).toLocaleString()} 千円`, '']}
+                  labelFormatter={(label) => `${label} 経過時点`}
+                />
+                <Legend />
+                <ReferenceLine y={0} stroke="#666" strokeWidth={2} />
+                <Bar dataKey="actual" name="実績累計損益" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Line type="monotone" dataKey="sim" name="シミュレーション予測 (目標ライン)" stroke="#ea580c" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
