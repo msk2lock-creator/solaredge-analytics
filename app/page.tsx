@@ -2,10 +2,10 @@
 import React, { useState } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Area, ScatterChart, Scatter
+  ComposedChart, Area, ScatterChart, Scatter, Line
 } from 'recharts';
 
-// モックデータ（4月1日〜4月10日）
+// 日次モックデータ（4月1日〜4月10日）
 const dailyData = [
   { date: '4/1', generation: 0.05, consumption: 0.63, fromGrid: 0.57, sunHours: 0.5 },
   { date: '4/2', generation: 0.23, consumption: 0.61, fromGrid: 0.38, sunHours: 4.2 },
@@ -19,16 +19,32 @@ const dailyData = [
   { date: '4/10', generation: 0.31, consumption: 0.88, fromGrid: 0.57, sunHours: 6.5 },
 ];
 
+// PDFから抽出した月別シミュレーションデータと実績のモックデータ
+const monthlyComparisonData = [
+  { month: '1月', sim: 3582, actual: 3450 },
+  { month: '2月', sim: 4423, actual: 4620 },
+  { month: '3月', sim: 6061, actual: 5900 },
+  { month: '4月', sim: 6446, actual: 2150 }, // 4月は途中経過の想定
+  { month: '5月', sim: 6768, actual: null },
+  { month: '6月', sim: 5208, actual: null },
+  { month: '7月', sim: 6641, actual: null },
+  { month: '8月', sim: 6996, actual: null },
+  { month: '9月', sim: 6548, actual: null },
+  { month: '10月', sim: 5605, actual: null },
+  { month: '11月', sim: 4150, actual: null },
+  { month: '12月', sim: 3637, actual: null },
+];
+
 export default function SolarEdgeApp() {
   const [currentView, setCurrentView] = useState('login');
-  const [activeTab, setActiveTab] = useState(1);
+  const [activeTab, setActiveTab] = useState(4); // 最初から新しいタブを見せる設定
   const [isUploading, setIsUploading] = useState(false);
   
   // 年月の選択用の状態（デフォルトは2026年4月）
   const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedMonth, setSelectedMonth] = useState('4');
 
-  // 1. ログイン画面（モダンデザイン）
+  // 1. ログイン画面
   if (currentView === 'login') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -111,7 +127,6 @@ export default function SolarEdgeApp() {
         <div>
           <h1 className="text-2xl font-bold text-gray-800">発電分析ダッシュボード</h1>
           
-          {/* 追加：年月選択プルダウン */}
           <div className="flex items-center gap-2 mt-3">
             <span className="text-sm font-medium text-gray-500">対象データ:</span>
             <select 
@@ -136,7 +151,6 @@ export default function SolarEdgeApp() {
         </div>
 
         <div className="flex gap-4 items-center">
-          {/* 追加：データインポートボタン */}
           <button 
             onClick={() => setCurrentView('upload')} 
             className="flex items-center gap-2 bg-green-600 hover:bg-green-700 active:scale-[0.98] text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-sm"
@@ -148,7 +162,7 @@ export default function SolarEdgeApp() {
         </div>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <p className="text-sm font-medium text-gray-500 mb-1">当月総発電量</p>
           <p className="text-3xl font-bold text-gray-800">1.84 <span className="text-base font-medium text-gray-500">MWh</span></p>
@@ -161,11 +175,16 @@ export default function SolarEdgeApp() {
           <p className="text-sm font-medium text-gray-500 mb-1">電力自給率</p>
           <p className="text-3xl font-bold text-blue-600">23.7 <span className="text-base font-medium text-gray-500">%</span></p>
         </div>
+        <div className="bg-gradient-to-br from-orange-50 to-orange-100 p-6 rounded-2xl shadow-sm border border-orange-200">
+          <p className="text-sm font-medium text-orange-700 mb-1">累計投資回収率 (推定)</p>
+          <p className="text-3xl font-bold text-orange-600">41.2 <span className="text-base font-medium text-orange-500">%</span></p>
+          <p className="text-xs text-orange-600 mt-2">目標回収: 6年11ヶ月</p>
+        </div>
       </div>
 
-      <div className="mb-6 border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
-          {[1, 2, 3].map((tab) => (
+      <div className="mb-6 border-b border-gray-200 overflow-x-auto">
+        <nav className="-mb-px flex space-x-8 min-w-max">
+          {[1, 2, 3, 4].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -175,7 +194,8 @@ export default function SolarEdgeApp() {
             >
               {tab === 1 && '① 消費電力データ'}
               {tab === 2 && '② 発電電力 ＋ 日照時間'}
-              {tab === 3 && '③ 発電電力と日照時間の相関'}
+              {tab === 3 && '③ 日照時間との相関'}
+              {tab === 4 && '④ シミュレーション予実管理'}
             </button>
           ))}
         </nav>
@@ -221,6 +241,32 @@ export default function SolarEdgeApp() {
               <Scatter name="日別データ" data={dailyData} fill="#3b82f6" />
             </ScatterChart>
           </ResponsiveContainer>
+        )}
+
+        {activeTab === 4 && (
+          <div className="h-full flex flex-col">
+            <div className="flex justify-between items-center mb-6 px-4">
+              <h3 className="font-bold text-gray-700">月間発電量：事前のシミュレーション値と実際の実績の比較</h3>
+              <div className="text-sm bg-orange-50 text-orange-700 px-4 py-1.5 rounded-full font-bold border border-orange-200">
+                年間予測: 66,065 kWh
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={monthlyComparisonData} margin={{ top: 20, right: 30, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="month" />
+                <YAxis />
+                <Tooltip 
+                  formatter={(value) => [`${value} kWh`, '']}
+                  labelFormatter={(label) => `${label} のデータ`}
+                />
+                <Legend />
+                <Bar dataKey="actual" name="実績発電量" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={50} />
+                <Area type="monotone" dataKey="sim" name="シミュレーション予測" fill="#f97316" stroke="#ea580c" opacity={0.15} strokeDasharray="5 5" />
+                <Line type="monotone" dataKey="sim" name="予測ライン" stroke="#ea580c" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </div>
     </div>
