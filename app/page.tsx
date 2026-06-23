@@ -1,36 +1,20 @@
 "use client";
 import React, { useState } from 'react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Area, Line, ReferenceLine
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  ComposedChart, Bar, Line, ReferenceLine
 } from 'recharts';
-
-// --- モックデータ ---
-const dailyData = [
-  { date: '4/1', generation: 0.05, consumption: 0.63, fromGrid: 0.57 },
-  { date: '4/2', generation: 0.23, consumption: 0.61, fromGrid: 0.38 },
-  { date: '4/3', generation: 0.22, consumption: 0.69, fromGrid: 0.47 },
-  { date: '4/4', generation: 0.07, consumption: 0.71, fromGrid: 0.64 },
-  { date: '4/5', generation: 0.22, consumption: 0.65, fromGrid: 0.43 },
-  { date: '4/6', generation: 0.18, consumption: 0.74, fromGrid: 0.56 },
-  { date: '4/7', generation: 0.26, consumption: 1.05, fromGrid: 0.79 },
-  { date: '4/8', generation: 0.35, consumption: 1.12, fromGrid: 0.77 },
-  { date: '4/9', generation: 0.04, consumption: 0.66, fromGrid: 0.62 },
-  { date: '4/10', generation: 0.31, generation: 0.88, fromGrid: 0.57 },
-];
 
 export default function SolarEdgeApp() {
   // --- 認証・表示状態管理 ---
-  // ログイン画面を表示し、入力欄は空欄でスタートします
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState(4); 
-  const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedMonth, setSelectedMonth] = useState('4');
 
   // --- データの定義 ---
-  const [monthlyData] = useState([
+  const monthlyData = [
     { month: '1月', sim: 3582, actual: 3450, selfSufficiency: 15.2 },
     { month: '2月', sim: 4423, actual: 4620, selfSufficiency: 18.5 },
     { month: '3月', sim: 6061, actual: 5900, selfSufficiency: 21.0 },
@@ -43,9 +27,9 @@ export default function SolarEdgeApp() {
     { month: '10月', sim: 5605, actual: null, selfSufficiency: 0 },
     { month: '11月', sim: 4150, actual: null, selfSufficiency: 0 },
     { month: '12月', sim: 3637, actual: null, selfSufficiency: 0 },
-  ]);
+  ];
 
-  const [roiData] = useState([
+  const roiData = [
     { year: '0年', sim: -10000, actual: -10000 },
     { year: '1年', sim: -8547, actual: -8200 },
     { year: '2年', sim: -7099, actual: -6500 },
@@ -54,12 +38,12 @@ export default function SolarEdgeApp() {
     { year: '5年', sim: -2794, actual: null },
     { year: '6年', sim: -1371, actual: null },
     { year: '7年', sim: 46, actual: null }, 
-  ]);
+  ];
 
   // --- ログイン処理 ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // パスワードチェックを一時的に解除し、ボタンを押せば誰でも入れるように変更
+    // パスワードチェックを解除し、空欄のままボタンを押せば入れるように設定
     setIsLoggedIn(true);
   };
 
