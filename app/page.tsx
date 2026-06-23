@@ -30,7 +30,7 @@ export default function SolarEdgeApp() {
   const [selectedMonth, setSelectedMonth] = useState('4');
   
   const [monthlyData, setMonthlyData] = useState<MonthlyDataItem[]>([]);
-  const [allDailyData, setAllDailyData] = useState<DailyDataItem[]>([]); // 全ての日次データ
+  const [allDailyData, setAllDailyData] = useState<DailyDataItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +63,25 @@ export default function SolarEdgeApp() {
   useEffect(() => {
     fetchSpreadsheetData();
   }, []);
+
+  // ① 月送り・戻しのロジック
+  const handlePrevMonth = () => {
+    let y = parseInt(selectedYear);
+    let m = parseInt(selectedMonth);
+    if (m === 1) { m = 12; y -= 1; }
+    else { m -= 1; }
+    setSelectedYear(y.toString());
+    setSelectedMonth(m.toString());
+  };
+
+  const handleNextMonth = () => {
+    let y = parseInt(selectedYear);
+    let m = parseInt(selectedMonth);
+    if (m === 12) { m = 1; y += 1; }
+    else { m += 1; }
+    setSelectedYear(y.toString());
+    setSelectedMonth(m.toString());
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -134,7 +153,6 @@ export default function SolarEdgeApp() {
       const targetYearMonth = `${targetYearStr}年${targetMonthStr}月`;
 
       try {
-        // APIに月次データと日次データを一緒に送る
         const res = await fetch('/api/solar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -152,7 +170,7 @@ export default function SolarEdgeApp() {
         
         setSelectedYear(targetYearStr);
         setSelectedMonth(targetMonthStr);
-        fetchSpreadsheetData(); // 最新のデータを再取得
+        fetchSpreadsheetData();
       } catch (err) {
         console.error(err);
         alert("スプレッドシートへの保存中にエラーが発生しました。");
@@ -163,16 +181,55 @@ export default function SolarEdgeApp() {
     if (e.target) e.target.value = '';
   };
 
-  // 選択された年月（例: 2026年4月）のデータだけを抽出
+  // ② 発電予実グラフ用：月次データを時系列順にソート
+  const sortedMonthlyData = [...monthlyData].sort((a, b) => {
+    const parseMonth = (mStr: string) => {
+      const match = mStr.match(/(\d{4})年(\d+)月/);
+      if (match) return parseInt(match[1]) * 100 + parseInt(match[2]);
+      const match2 = mStr.match(/(\d+)月/);
+      if (match2) return 202600 + parseInt(match2[1]); // 古いフォーマット用
+      return 0;
+    };
+    return parseMonth(a.month) - parseMonth(b.month);
+  });
+
+  // ③ 昨年比較用：本年と前年のデータを結合
   const currentTargetStr = `${selectedYear}年${selectedMonth}月`;
+  const lastYearTargetStr = `${Number(selectedYear) - 1}年${selectedMonth}月`;
+
+  const rawDailyThisYear = allDailyData.filter(d => d.yearMonth === currentTargetStr);
+  const rawDailyLastYear = allDailyData.filter(d => d.yearMonth === lastYearTargetStr);
+
+  const dateSet = new Set<string>();
+  rawDailyThisYear.forEach(d => dateSet.add(d.date));
+  rawDailyLastYear.forEach(d => dateSet.add(d.date));
+
+  const sortedDates = Array.from(dateSet).sort((a, b) => {
+    const getNum = (str: string) => parseInt(str.replace(/[^0-9]/g, '')) || 0;
+    return getNum(a) - getNum(b);
+  });
+
+  const dailyData = sortedDates.map(dateStr => {
+    const t = rawDailyThisYear.find(d => d.date === dateStr);
+    const l = rawDailyLastYear.find(d => d.date === dateStr);
+    return {
+      date: dateStr,
+      generation: t?.generation || 0,
+      consumption: t?.consumption || 0,
+      solarFrom: t?.solarFrom || 0,
+      gridFrom: t?.gridFrom || 0,
+      sunlight: t?.sunlight || 0,
+      // 昨年のデータ（なければ0）
+      generationLastYear: l?.generation || 0,
+      consumptionLastYear: l?.consumption || 0,
+      solarFromLastYear: l?.solarFrom || 0,
+      gridFromLastYear: l?.gridFrom || 0,
+      sunlightLastYear: l?.sunlight || 0,
+    };
+  });
+
   const currentTarget = monthlyData.find(d => d.month === currentTargetStr) || monthlyData.find(d => d.month === `${selectedMonth}月`);
   
-  // 日次データをフィルタリング（重複してインポートした場合は上書きして整理する）
-  const rawDaily = allDailyData.filter(d => d.yearMonth === currentTargetStr);
-  const dailyMap = new Map<string, DailyDataItem>();
-  rawDaily.forEach(d => dailyMap.set(d.date, d));
-  const dailyData = Array.from(dailyMap.values());
-
   const getAutoAnalysis = () => {
     if (isLoading || monthlyData.length === 0) return { status: "info", title: "読み込み中...", message: "最新のデータを取得しています。", action: "少々お待ちください。" };
     if (!currentTarget || currentTarget.actual === null) return { status: "info", title: "データ待機中", message: `${currentTargetStr}の実績データがまだ登録されていません。`, action: "「データインポート」ボタンからCSVを選択すると自動解析が実行されます。" };
@@ -207,14 +264,23 @@ export default function SolarEdgeApp() {
       <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:mb-0">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">西岡勝次商店 分析レポート</h1>
-          <div className="flex items-center gap-2 mt-2 print:hidden">
-            <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm outline-none">
-              {[2025, 2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>{y}年</option>)}
-            </select>
-            <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm outline-none">
-              {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月度実績</option>)}
-            </select>
-            <button onClick={fetchSpreadsheetData} className="ml-2 text-xs bg-slate-200 hover:bg-slate-300 px-3 py-1.5 rounded-lg font-bold text-slate-700 transition-all">🔄 同期</button>
+          <div className="flex items-center gap-3 mt-3 print:hidden">
+            
+            {/* ① カーソル付きの年月セレクト */}
+            <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm">
+              <button onClick={handlePrevMonth} className="px-3 py-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-l-lg border-r border-slate-200 transition-colors">◀</button>
+              <div className="flex items-center px-3">
+                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent font-bold outline-none cursor-pointer text-sm">
+                  {[2025, 2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>{y}年</option>)}
+                </select>
+                <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent font-bold outline-none cursor-pointer text-sm ml-1">
+                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月度実績</option>)}
+                </select>
+              </div>
+              <button onClick={handleNextMonth} className="px-3 py-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-r-lg border-l border-slate-200 transition-colors">▶</button>
+            </div>
+
+            <button onClick={fetchSpreadsheetData} className="text-xs bg-slate-200 hover:bg-slate-300 px-3 py-2 rounded-lg font-bold text-slate-700 transition-all">🔄 同期</button>
           </div>
         </div>
         <div className="flex gap-3 print:hidden">
@@ -258,9 +324,13 @@ export default function SolarEdgeApp() {
                     <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
                     <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
-                    <Bar dataKey="solarFrom" stackId="a" name="太陽光から (自家消費 kWh)" fill="#10b981" maxBarSize={40} />
-                    <Bar dataKey="gridFrom" stackId="a" name="系統から (買電 kWh)" fill="#f43f5e" maxBarSize={40} />
-                    <Line type="monotone" dataKey="consumption" name="総消費電力 (kWh)" stroke="#0f172a" strokeWidth={2} dot={false} />
+                    {/* ③ 前年比較（左側に配置するため、先に記述） */}
+                    <Bar dataKey="solarFromLastYear" stackId="last" name="【前年】太陽光から" fill="#6ee7b7" maxBarSize={20} />
+                    <Bar dataKey="gridFromLastYear" stackId="last" name="【前年】系統から" fill="#fda4af" maxBarSize={20} />
+                    <Bar dataKey="solarFrom" stackId="this" name="【本年】太陽光から" fill="#10b981" maxBarSize={20} />
+                    <Bar dataKey="gridFrom" stackId="this" name="【本年】系統から" fill="#f43f5e" maxBarSize={20} />
+                    <Line type="monotone" dataKey="consumptionLastYear" name="【前年】総消費電力" stroke="#94a3b8" strokeDasharray="4 4" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="consumption" name="【本年】総消費電力" stroke="#0f172a" strokeWidth={2} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
@@ -273,8 +343,11 @@ export default function SolarEdgeApp() {
                     <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" tick={{fontSize: 12}} />
                     <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
-                    <Bar yAxisId="left" dataKey="generation" name="日次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Line yAxisId="right" type="monotone" dataKey="sunlight" name="日照時間 (時間)" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                    {/* ③ 前年比較（左側に配置） */}
+                    <Bar yAxisId="left" dataKey="generationLastYear" name="【前年】日次発電量" fill="#93c5fd" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                    <Bar yAxisId="left" dataKey="generation" name="【本年】日次発電量" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={20} />
+                    <Line yAxisId="right" type="monotone" dataKey="sunlightLastYear" name="【前年】日照時間" stroke="#fcd34d" strokeDasharray="4 4" strokeWidth={2} dot={false} />
+                    <Line yAxisId="right" type="monotone" dataKey="sunlight" name="【本年】日照時間" stroke="#f59e0b" strokeWidth={2} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
@@ -285,7 +358,8 @@ export default function SolarEdgeApp() {
               )}
               {activeTab === 4 && (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={monthlyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                  {/* ② 発電予実グラフにソート済みのデータを渡す */}
+                  <ComposedChart data={sortedMonthlyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="month" stroke="#94a3b8" tick={{fontSize: 12}} />
                     <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
