@@ -1,11 +1,10 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ComposedChart, Bar, Line, ReferenceLine
 } from 'recharts';
 
-// データの型定義
 interface MonthlyDataItem {
   month: string;
   sim: number;
@@ -13,26 +12,17 @@ interface MonthlyDataItem {
   selfSufficiency: number;
 }
 
-interface RoiDataItem {
-  year: string;
-  sim: number;
-  actual: number | null;
-}
-
 export default function SolarEdgeApp() {
-  // --- 認証・表示状態管理 ---
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState(4); 
   const [selectedMonth, setSelectedMonth] = useState('4');
-
-  // --- スプレッドシートから取得するデータ状態管理 ---
   const [monthlyData, setMonthlyData] = useState<MonthlyDataItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 投資回収データ（こちらは追ってスプレッドシート化するため一旦ローカル維持）
-  const roiData: RoiDataItem[] = [
+  const roiData = [
     { year: '0年', sim: -10000, actual: -10000 },
     { year: '1年', sim: -8547, actual: -8200 },
     { year: '2年', sim: -7099, actual: -6500 },
@@ -43,7 +33,6 @@ export default function SolarEdgeApp() {
     { year: '7年', sim: 46, actual: null }, 
   ];
 
-  // 🔄 スプレッドシートから最新データを読み込む関数
   const fetchSpreadsheetData = async () => {
     try {
       setIsLoading(true);
@@ -58,26 +47,118 @@ export default function SolarEdgeApp() {
     }
   };
 
-  // 画面が開いたとき、および月が切り替わったときにデータを自動更新
   useEffect(() => {
     fetchSpreadsheetData();
   }, []);
 
-  // --- ログイン処理 ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoggedIn(true);
   };
 
-  // --- 勝手に分析機能のロジック（スプレッドシート連動版） ---
+  // 📂 CSVインポート処理のメインロジック
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const text = event.target?.result as string;
+      const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+      
+      if (lines.length <= 1) {
+        alert("CSVデータが空か、構造が正しくありません。");
+        return;
+      }
+
+      // ヘッダー行から各列のインデックスを動的に特定
+      const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
+      const timeIdx = headers.indexOf('測定時間');
+      const genIdx = headers.indexOf('発電 (MWh)');
+      const consIdx = headers.indexOf('消費 (MWh)');
+      const solarIdx = headers.indexOf('太陽光から (MWh)');
+
+      if (timeIdx === -1 || genIdx === -1 || consIdx === -1 || solarIdx === -1) {
+        alert("必須項目（測定時間、発電、消費、太陽光から）がCSV内に見つかりません。");
+        return;
+      }
+
+      let totalGenMwh = 0;
+      let totalConsMwh = 0;
+      let totalSolarMwh = 0;
+      let targetMonthStr = "";
+
+      // 各行を走査して合計値を集計
+      for (let i = 1; i < lines.length; i++) {
+        const columns = lines[i].split(',').map(c => c.replace(/"/g, ''));
+        if (columns.length < headers.length) continue;
+
+        const timeValue = columns[timeIdx];
+        const genValue = parseFloat(columns[genIdx]) || 0;
+        const consValue = parseFloat(columns[consIdx]) || 0;
+        const solarValue = parseFloat(columns[solarIdx]) || 0;
+
+        totalGenMwh += genValue;
+        totalConsMwh += consValue;
+        totalSolarMwh += solarValue;
+
+        // 最初に見つかった日付情報から「〇月」を抽出（例: 2026年4月1日 -> 4月）
+        if (!targetMonthStr && timeValue) {
+          const match = timeValue.match(/(\d+)月/);
+          if (match) targetMonthStr = `${match[1]}月`;
+        }
+      }
+
+      if (!targetMonthStr) {
+        alert("CSV内から対象の月度を判定できませんでした。");
+        return;
+      }
+
+      // MWh から kWh へ変換（1000倍）し、四捨五入して整数に
+      const actualKwh = Math.round(totalGenMwh * 1000);
+      // 自給率の自動計算 (%)
+      const selfSufficiencyRate = totalConsMwh > 0 ? parseFloat(((totalSolarMwh / totalConsMwh) * 100).toFixed(1)) : 0;
+
+      // バックエンドAPI経由でスプレッドシートへ書き込み
+      try {
+        const res = await fetch('/api/solar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            month: targetMonthStr,
+            actual: actualKwh,
+            selfSufficiency: selfSufficiencyRate
+          })
+        });
+
+        if (!res.ok) throw new Error('データ保存失敗');
+        
+        alert(`🎉 インポート成功！\n対象期間: ${targetMonthStr}\n総発電量: ${actualKwh.toLocaleString()} kWh\n電力自給率: ${selfSufficiencyRate} %\n\nGoogleスプレッドシートへの永続保存が完了しました。`);
+        
+        // 選択された月をインポートした月に自動切り替え
+        const monthNum = targetMonthStr.replace('月', '');
+        setSelectedMonth(monthNum);
+        
+        // 最新データを再読み込みして画面を更新
+        fetchSpreadsheetData();
+      } catch (err) {
+        console.error(err);
+        alert("スプレッドシートへの保存中にエラーが発生しました。");
+      }
+    };
+
+    reader.readAsText(file);
+    // 同じファイルを再度選択できるようにリセット
+    if (e.target) e.target.value = '';
+  };
+
   const getAutoAnalysis = () => {
     if (isLoading || monthlyData.length === 0) {
-      return { status: "info", title: "読み込み中...", message: "スプレッドシートから最新の発電データを取得しています。", action: "少々お待ちください。" };
+      return { status: "info", title: "読み込み中...", message: "最新のデータを取得しています。", action: "少々お待ちください。" };
     }
-
     const currentData = monthlyData.find(d => d.month === `${selectedMonth}月`);
     if (!currentData || currentData.actual === null) {
-      return { status: "info", title: "データ待機中", message: `${selectedMonth}月の実績データがまだ登録されていません。`, action: "スプレッドシートのactual列に数値を入力するか、CSVインポートを実行してください。" };
+      return { status: "info", title: "データ待機中", message: `${selectedMonth}月の実績データがまだ登録されていません。`, action: "「データインポート」ボタンからCSVを選択すると自動解析が実行されます。" };
     }
     const ratio = currentData.actual / currentData.sim;
     if (ratio >= 1.05) {
@@ -106,13 +187,11 @@ export default function SolarEdgeApp() {
 
   const analysis = getAutoAnalysis();
 
-  // 特定の月の動的サマリー計算
   const currentTarget = monthlyData.find(d => d.month === `${selectedMonth}月`);
   const displayActual = currentTarget && currentTarget.actual !== null ? (currentTarget.actual / 1000).toFixed(2) : "0.00";
   const displaySufficiency = currentTarget ? currentTarget.selfSufficiency.toFixed(1) : "0.0";
-  const displayRatio = currentTarget && currentTarget.actual !== null ? ((currentTarget.actual / currentTarget.sim - 1) * 100).toFixed(1) : "0.0";
+  const displayRatio = currentTarget && currentTarget.actual !== null && currentTarget.sim > 0 ? ((currentTarget.actual / currentTarget.sim - 1) * 100).toFixed(1) : "0.0";
 
-  // --- ログイン画面 ---
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -136,11 +215,18 @@ export default function SolarEdgeApp() {
     );
   }
 
-  // --- メインダッシュボード ---
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-6 md:p-10">
       
-      {/* ヘッダー */}
+      {/* 隠しファイルインプット */}
+      <input 
+        type="file" 
+        accept=".csv" 
+        ref={fileInputRef} 
+        onChange={handleFileUpload} 
+        className="hidden" 
+      />
+
       <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:mb-0">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">西岡勝次商店 分析レポート</h1>
@@ -157,12 +243,16 @@ export default function SolarEdgeApp() {
             <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
             レポート印刷
           </button>
-          <button className="bg-slate-900 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg">データインポート</button>
+          <button 
+            onClick={() => fileInputRef.current?.click()} 
+            className="bg-slate-900 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg"
+          >
+            データインポート
+          </button>
           <button onClick={() => setIsLoggedIn(false)} className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-300 transition-all">ログアウト</button>
         </div>
       </header>
 
-      {/* 勝手に分析エリア */}
       <div className={`mb-8 p-6 rounded-3xl border-2 shadow-sm transition-all ${
         analysis.status === 'success' ? 'bg-emerald-50 border-emerald-100' :
         analysis.status === 'warning' ? 'bg-amber-50 border-amber-100' : 'bg-blue-50 border-blue-100'
@@ -183,7 +273,6 @@ export default function SolarEdgeApp() {
         </div>
       </div>
 
-      {/* サマリーカード */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 print:grid-cols-4">
         {[
           { label: '選択月総発電量', val: displayActual, unit: 'MWh', sub: `計画比 ${Number(displayRatio) >= 0 ? '+' : ''}${displayRatio}%`, color: 'text-emerald-600' },
@@ -199,7 +288,6 @@ export default function SolarEdgeApp() {
         ))}
       </div>
 
-      {/* メインエリア */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8">
         <div className="flex flex-wrap gap-4 mb-8 border-b border-slate-100 pb-4 print:hidden">
           {['消費電力', '発電と日照時間', '相関分析', '発電予実', '投資回収'].map((t, i) => (
