@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import path from 'path';
 
-// ご自身のスプレッドシートIDをここに貼り付けてください
-const SPREADSHEET_ID = 'ここにあなたのスプレッドシートIDを貼り付けてください';
+// ご提示いただいたスプレッドシートIDを組み込み済みです！
+const SPREADSHEET_ID = '1x-2BMlYpsvsgr-UGceI8F98NG0ZQwCzc1F7acgZ0B6Y';
 
 const auth = new google.auth.GoogleAuth({
   keyFile: path.join(process.cwd(), 'credentials.json'),
