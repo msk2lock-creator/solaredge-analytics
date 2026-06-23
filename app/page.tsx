@@ -16,15 +16,15 @@ const dailyData = [
   { date: '4/7', generation: 0.26, consumption: 1.05, fromGrid: 0.79 },
   { date: '4/8', generation: 0.35, consumption: 1.12, fromGrid: 0.77 },
   { date: '4/9', generation: 0.04, consumption: 0.66, fromGrid: 0.62 },
-  { date: '4/10', generation: 0.31, consumption: 0.88, fromGrid: 0.57 },
+  { date: '4/10', generation: 0.31, generation: 0.88, fromGrid: 0.57 },
 ];
 
 export default function SolarEdgeApp() {
   // --- 認証・表示状態管理 ---
-  // ログイン画面を表示しつつ、最初から admin が入力された状態にしています
+  // ログイン画面を表示し、入力欄は空欄でスタートします
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('admin');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState(4); 
   const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedMonth, setSelectedMonth] = useState('4');
@@ -59,11 +59,8 @@ export default function SolarEdgeApp() {
   // --- ログイン処理 ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username.toLowerCase() === 'admin' && password === 'admin') {
-      setIsLoggedIn(true);
-    } else {
-      alert('ユーザー名またはパスワードが違います（demo: admin / admin）');
-    }
+    // パスワードチェックを一時的に解除し、ボタンを押せば誰でも入れるように変更
+    setIsLoggedIn(true);
   };
 
   // --- 勝手に分析機能のロジック（完全自家消費特化） ---
@@ -114,8 +111,8 @@ export default function SolarEdgeApp() {
           <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">SolarEdge Analytics</h1>
           <p className="text-center text-slate-500 mb-8 text-sm">西岡勝次商店様向け分析レポート</p>
           <form onSubmit={handleLogin} className="space-y-4">
-            <input type="text" placeholder="ユーザー名" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-slate-800" />
-            <input type="password" placeholder="パスワード" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-slate-800" />
+            <input type="text" placeholder="ユーザー名（空欄でログイン可）" value={username} onChange={(e) => setUsername(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-slate-800" />
+            <input type="password" placeholder="パスワード（空欄でログイン可）" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-amber-500 outline-none text-slate-800" />
             <button type="submit" className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-all">ログイン</button>
           </form>
         </div>
