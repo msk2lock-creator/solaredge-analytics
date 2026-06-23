@@ -21,7 +21,8 @@ const dailyData = [
 
 export default function SolarEdgeApp() {
   // --- 認証・表示状態管理 ---
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  // 開発・テスト用に初期値を true に設定し、ログイン画面をスキップしています
+  const [isLoggedIn, setIsLoggedIn] = useState(true); 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState(4); 
@@ -58,14 +59,14 @@ export default function SolarEdgeApp() {
   // --- ログイン処理 ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'admin' && password === 'admin') {
+    if (username.toLowerCase() === 'admin' && password === 'admin') {
       setIsLoggedIn(true);
     } else {
       alert('ユーザー名またはパスワードが違います（demo: admin / admin）');
     }
   };
 
-  // --- 勝手に分析機能のロジック ---
+  // --- 勝手に分析機能のロジック（完全自家消費特化） ---
   const getAutoAnalysis = () => {
     const currentData = monthlyData.find(d => d.month === `${selectedMonth}月`);
     if (!currentData || currentData.actual === null) {
@@ -131,7 +132,7 @@ export default function SolarEdgeApp() {
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">西岡勝次商店 分析レポート</h1>
           <div className="flex items-center gap-4 mt-2 print:hidden">
-            <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm outline-none">
+            <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm outline-none cursor-pointer">
               {[1,2,3,4].map(m => <option key={m} value={m}>{m}月度実績</option>)}
             </select>
             <span className="text-slate-400 text-sm font-medium">最終更新: 2026/06/23</span>
@@ -143,10 +144,12 @@ export default function SolarEdgeApp() {
             レポート印刷
           </button>
           <button className="bg-slate-900 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg">データインポート</button>
+          {/* 開発中にログアウトしてログイン画面を確認したい場合の隠しボタン */}
+          <button onClick={() => setIsLoggedIn(false)} className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-300 transition-all">ロック確認</button>
         </div>
       </header>
 
-      {/* 勝手に分析エリア（最重要） */}
+      {/* 勝手に分析エリア */}
       <div className={`mb-8 p-6 rounded-3xl border-2 shadow-sm transition-all ${
         analysis.status === 'success' ? 'bg-emerald-50 border-emerald-100' :
         analysis.status === 'warning' ? 'bg-amber-50 border-amber-100' : 'bg-blue-50 border-blue-100'
