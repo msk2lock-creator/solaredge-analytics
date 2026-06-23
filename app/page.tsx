@@ -13,26 +13,24 @@ interface MonthlyDataItem {
 }
 
 interface DailyDataItem {
+  yearMonth: string;
   date: string;
   generation: number;
   consumption: number;
   solarFrom: number;
   gridFrom: number;
-  sunlight: number | null; // 日照時間を追加
+  sunlight: number;
 }
 
 export default function SolarEdgeApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [activeTab, setActiveTab] = useState(4); 
   
-  // 年月の状態管理
   const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedMonth, setSelectedMonth] = useState('4');
   
   const [monthlyData, setMonthlyData] = useState<MonthlyDataItem[]>([]);
-  const [dailyData, setDailyData] = useState<DailyDataItem[]>([]);
+  const [allDailyData, setAllDailyData] = useState<DailyDataItem[]>([]); // 全ての日次データ
   const [isLoading, setIsLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,7 +51,8 @@ export default function SolarEdgeApp() {
       const res = await fetch('/api/solar');
       if (!res.ok) throw new Error('データ取得失敗');
       const data = await res.json();
-      setMonthlyData(data);
+      setMonthlyData(data.monthlyData || []);
+      setAllDailyData(data.dailyData || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -64,11 +63,6 @@ export default function SolarEdgeApp() {
   useEffect(() => {
     fetchSpreadsheetData();
   }, []);
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoggedIn(true);
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -113,7 +107,6 @@ export default function SolarEdgeApp() {
         totalConsMwh += consValue;
         totalSolarMwh += solarValue;
 
-        // 年と月を動的に抽出
         if (!targetMonthStr && timeValue) {
           const match = timeValue.match(/(\d{4})年(\d+)月/);
           if (match) {
@@ -125,40 +118,41 @@ export default function SolarEdgeApp() {
         if (timeValue) {
           const dateMatch = timeValue.split(' ')[0];
           parsedDailyData.push({
+            yearMonth: `${targetYearStr}年${targetMonthStr}月`,
             date: dateMatch.replace(/^\d{4}年/, ''),
             generation: Math.round(genValue * 1000),
             consumption: Math.round(consValue * 1000),
             solarFrom: Math.round(solarValue * 1000),
             gridFrom: Math.round(gridFromValue * 1000),
-            sunlight: 0 // 日照時間は現状ダミー値(0)として器を用意
+            sunlight: 0
           });
         }
       }
-
-      setDailyData(parsedDailyData);
 
       const actualKwh = Math.round(totalGenMwh * 1000);
       const selfSufficiencyRate = totalConsMwh > 0 ? parseFloat(((totalSolarMwh / totalConsMwh) * 100).toFixed(1)) : 0;
       const targetYearMonth = `${targetYearStr}年${targetMonthStr}月`;
 
       try {
+        // APIに月次データと日次データを一緒に送る
         const res = await fetch('/api/solar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            month: targetYearMonth, // 「2026年4月」の形式で保存
+            month: targetYearMonth,
             actual: actualKwh,
-            selfSufficiency: selfSufficiencyRate
+            selfSufficiency: selfSufficiencyRate,
+            dailyData: parsedDailyData
           })
         });
 
         if (!res.ok) throw new Error('データ保存失敗');
         
-        alert(`🎉 インポート成功！\n対象期間: ${targetYearMonth}\n総発電量: ${actualKwh.toLocaleString()} kWh\n\n日次詳細グラフの生成とスプレッドシートの更新が完了しました。`);
+        alert(`🎉 インポート成功！\n\n日次データもスプレッドシートへ完全に保存されました。`);
         
         setSelectedYear(targetYearStr);
         setSelectedMonth(targetMonthStr);
-        fetchSpreadsheetData();
+        fetchSpreadsheetData(); // 最新のデータを再取得
       } catch (err) {
         console.error(err);
         alert("スプレッドシートへの保存中にエラーが発生しました。");
@@ -169,26 +163,23 @@ export default function SolarEdgeApp() {
     if (e.target) e.target.value = '';
   };
 
-  // 年月ベースでデータを検索
+  // 選択された年月（例: 2026年4月）のデータだけを抽出
   const currentTargetStr = `${selectedYear}年${selectedMonth}月`;
-  const currentTarget = monthlyData.find(d => d.month === currentTargetStr) 
-                     || monthlyData.find(d => d.month === `${selectedMonth}月`); // 過去の互換性用
+  const currentTarget = monthlyData.find(d => d.month === currentTargetStr) || monthlyData.find(d => d.month === `${selectedMonth}月`);
+  
+  // 日次データをフィルタリング（重複してインポートした場合は上書きして整理する）
+  const rawDaily = allDailyData.filter(d => d.yearMonth === currentTargetStr);
+  const dailyMap = new Map<string, DailyDataItem>();
+  rawDaily.forEach(d => dailyMap.set(d.date, d));
+  const dailyData = Array.from(dailyMap.values());
 
   const getAutoAnalysis = () => {
-    if (isLoading || monthlyData.length === 0) {
-      return { status: "info", title: "読み込み中...", message: "最新のデータを取得しています。", action: "少々お待ちください。" };
-    }
-    if (!currentTarget || currentTarget.actual === null) {
-      return { status: "info", title: "データ待機中", message: `${currentTargetStr}の実績データがまだ登録されていません。`, action: "「データインポート」ボタンからCSVを選択すると自動解析が実行されます。" };
-    }
+    if (isLoading || monthlyData.length === 0) return { status: "info", title: "読み込み中...", message: "最新のデータを取得しています。", action: "少々お待ちください。" };
+    if (!currentTarget || currentTarget.actual === null) return { status: "info", title: "データ待機中", message: `${currentTargetStr}の実績データがまだ登録されていません。`, action: "「データインポート」ボタンからCSVを選択すると自動解析が実行されます。" };
     const ratio = currentTarget.actual / (currentTarget.sim || 1);
-    if (ratio >= 1.05) {
-      return { status: "success", title: "🚀 【設備投資案】余剰電力の蓄電池活用をご検討ください", message: `シミュレーション比の大幅な上振れです。`, action: "💡 推奨：産業用蓄電池の導入検討" };
-    } else if (ratio < 0.95) {
-      return { status: "warning", title: "⚠️ 【異常検知】発電効率の低下が見られます", message: "日照条件と比較して発電量が不足しています。", action: "💡 推奨：パネルとパワコンの目視確認" };
-    } else {
-      return { status: "normal", title: "✨ 【安定運用】理想的な発電推移です", message: "事前の投資計画通りに健全に推移しています。", action: "💡 推奨：現在の運用を継続" };
-    }
+    if (ratio >= 1.05) return { status: "success", title: "🚀 【設備投資案】余剰電力の蓄電池活用をご検討ください", message: `シミュレーション比の大幅な上振れです。`, action: "💡 推奨：産業用蓄電池の導入検討" };
+    if (ratio < 0.95) return { status: "warning", title: "⚠️ 【異常検知】発電効率の低下が見られます", message: "日照条件と比較して発電量が不足しています。", action: "💡 推奨：パネルとパワコンの目視確認" };
+    return { status: "normal", title: "✨ 【安定運用】理想的な発電推移です", message: "事前の投資計画通りに健全に推移しています。", action: "💡 推奨：現在の運用を継続" };
   };
 
   const analysis = getAutoAnalysis();
@@ -201,7 +192,7 @@ export default function SolarEdgeApp() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md border border-slate-100">
           <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">SolarEdge Analytics</h1>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={(e) => { e.preventDefault(); setIsLoggedIn(true); }} className="space-y-4">
             <button type="submit" className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold">ログイン</button>
           </form>
         </div>
@@ -217,7 +208,6 @@ export default function SolarEdgeApp() {
         <div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">西岡勝次商店 分析レポート</h1>
           <div className="flex items-center gap-2 mt-2 print:hidden">
-            {/* 年の選択を追加 */}
             <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm outline-none">
               {[2025, 2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>{y}年</option>)}
             </select>
@@ -260,20 +250,38 @@ export default function SolarEdgeApp() {
             <div className="h-full flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
           ) : (
             <>
+              {activeTab === 1 && dailyData.length > 0 && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
+                    <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
+                    <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
+                    <Legend />
+                    <Bar dataKey="solarFrom" stackId="a" name="太陽光から (自家消費 kWh)" fill="#10b981" maxBarSize={40} />
+                    <Bar dataKey="gridFrom" stackId="a" name="系統から (買電 kWh)" fill="#f43f5e" maxBarSize={40} />
+                    <Line type="monotone" dataKey="consumption" name="総消費電力 (kWh)" stroke="#0f172a" strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
               {activeTab === 2 && dailyData.length > 0 && (
                 <ResponsiveContainer width="100%" height="100%">
-                  {/* 発電量と日照時間の複合グラフを復活 */}
                   <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
                     <YAxis yAxisId="left" stroke="#94a3b8" tick={{fontSize: 12}} />
                     <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" tick={{fontSize: 12}} />
-                    <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                    <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
                     <Bar yAxisId="left" dataKey="generation" name="日次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                     <Line yAxisId="right" type="monotone" dataKey="sunlight" name="日照時間 (時間)" stroke="#f59e0b" strokeWidth={2} dot={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
+              )}
+              {activeTab <= 3 && dailyData.length === 0 && (
+                <div className="h-full flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-slate-400 font-medium">対象月の日次データがスプレッドシートにありません。CSVをインポートしてください。</p>
+                </div>
               )}
               {activeTab === 4 && (
                 <ResponsiveContainer width="100%" height="100%">
@@ -285,6 +293,19 @@ export default function SolarEdgeApp() {
                     <Legend />
                     <Bar dataKey="actual" name="実績 (kWh)" fill="#0f172a" radius={[6, 6, 0, 0]} maxBarSize={40} />
                     <Line type="monotone" dataKey="sim" name="シミュレーション目標" stroke="#f59e0b" strokeWidth={3} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+              {activeTab === 5 && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={roiData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="year" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip />
+                    <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={2} />
+                    <Bar dataKey="actual" name="累計実績" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                    <Line type="monotone" dataKey="sim" name="目標推移" stroke="#f59e0b" strokeWidth={3} />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
