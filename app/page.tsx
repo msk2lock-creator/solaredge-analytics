@@ -1,9 +1,23 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
   ComposedChart, Bar, Line, ReferenceLine
 } from 'recharts';
+
+// データの型定義
+interface MonthlyDataItem {
+  month: string;
+  sim: number;
+  actual: number | null;
+  selfSufficiency: number;
+}
+
+interface RoiDataItem {
+  year: string;
+  sim: number;
+  actual: number | null;
+}
 
 export default function SolarEdgeApp() {
   // --- 認証・表示状態管理 ---
@@ -13,23 +27,12 @@ export default function SolarEdgeApp() {
   const [activeTab, setActiveTab] = useState(4); 
   const [selectedMonth, setSelectedMonth] = useState('4');
 
-  // --- データの定義 ---
-  const monthlyData = [
-    { month: '1月', sim: 3582, actual: 3450, selfSufficiency: 15.2 },
-    { month: '2月', sim: 4423, actual: 4620, selfSufficiency: 18.5 },
-    { month: '3月', sim: 6061, actual: 5900, selfSufficiency: 21.0 },
-    { month: '4月', sim: 6446, actual: 7090, selfSufficiency: 23.7 },
-    { month: '5月', sim: 6768, actual: null, selfSufficiency: 0 },
-    { month: '6月', sim: 5208, actual: null, selfSufficiency: 0 },
-    { month: '7月', sim: 6641, actual: null, selfSufficiency: 0 },
-    { month: '8月', sim: 6996, actual: null, selfSufficiency: 0 },
-    { month: '9月', sim: 6548, actual: null, selfSufficiency: 0 },
-    { month: '10月', sim: 5605, actual: null, selfSufficiency: 0 },
-    { month: '11月', sim: 4150, actual: null, selfSufficiency: 0 },
-    { month: '12月', sim: 3637, actual: null, selfSufficiency: 0 },
-  ];
+  // --- スプレッドシートから取得するデータ状態管理 ---
+  const [monthlyData, setMonthlyData] = useState<MonthlyDataItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const roiData = [
+  // 投資回収データ（こちらは追ってスプレッドシート化するため一旦ローカル維持）
+  const roiData: RoiDataItem[] = [
     { year: '0年', sim: -10000, actual: -10000 },
     { year: '1年', sim: -8547, actual: -8200 },
     { year: '2年', sim: -7099, actual: -6500 },
@@ -40,18 +43,41 @@ export default function SolarEdgeApp() {
     { year: '7年', sim: 46, actual: null }, 
   ];
 
+  // 🔄 スプレッドシートから最新データを読み込む関数
+  const fetchSpreadsheetData = async () => {
+    try {
+      setIsLoading(true);
+      const res = await fetch('/api/solar');
+      if (!res.ok) throw new Error('データ取得失敗');
+      const data = await res.json();
+      setMonthlyData(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // 画面が開いたとき、および月が切り替わったときにデータを自動更新
+  useEffect(() => {
+    fetchSpreadsheetData();
+  }, []);
+
   // --- ログイン処理 ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // パスワードチェックを解除し、空欄のままボタンを押せば入れるように設定
     setIsLoggedIn(true);
   };
 
-  // --- 勝手に分析機能のロジック（完全自家消費特化） ---
+  // --- 勝手に分析機能のロジック（スプレッドシート連動版） ---
   const getAutoAnalysis = () => {
+    if (isLoading || monthlyData.length === 0) {
+      return { status: "info", title: "読み込み中...", message: "スプレッドシートから最新の発電データを取得しています。", action: "少々お待ちください。" };
+    }
+
     const currentData = monthlyData.find(d => d.month === `${selectedMonth}月`);
     if (!currentData || currentData.actual === null) {
-      return { status: "info", title: "データ待機中", message: "対象月のデータがインポートされると自動分析を開始します。", action: "SolarEdgeのCSVデータをアップロードしてください。" };
+      return { status: "info", title: "データ待機中", message: `${selectedMonth}月の実績データがまだ登録されていません。`, action: "スプレッドシートのactual列に数値を入力するか、CSVインポートを実行してください。" };
     }
     const ratio = currentData.actual / currentData.sim;
     if (ratio >= 1.05) {
@@ -79,6 +105,12 @@ export default function SolarEdgeApp() {
   };
 
   const analysis = getAutoAnalysis();
+
+  // 特定の月の動的サマリー計算
+  const currentTarget = monthlyData.find(d => d.month === `${selectedMonth}月`);
+  const displayActual = currentTarget && currentTarget.actual !== null ? (currentTarget.actual / 1000).toFixed(2) : "0.00";
+  const displaySufficiency = currentTarget ? currentTarget.selfSufficiency.toFixed(1) : "0.0";
+  const displayRatio = currentTarget && currentTarget.actual !== null ? ((currentTarget.actual / currentTarget.sim - 1) * 100).toFixed(1) : "0.0";
 
   // --- ログイン画面 ---
   if (!isLoggedIn) {
@@ -114,8 +146,9 @@ export default function SolarEdgeApp() {
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">西岡勝次商店 分析レポート</h1>
           <div className="flex items-center gap-4 mt-2 print:hidden">
             <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-sm font-bold shadow-sm outline-none cursor-pointer">
-              {[1,2,3,4].map(m => <option key={m} value={m}>{m}月度実績</option>)}
+              {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月度実績</option>)}
             </select>
+            <button onClick={fetchSpreadsheetData} className="text-xs bg-slate-200 hover:bg-slate-300 px-3 py-1.5 rounded-lg font-bold text-slate-700 transition-all">🔄 スプレッドシート同期</button>
             <span className="text-slate-400 text-sm font-medium">最終更新: 2026/06/23</span>
           </div>
         </div>
@@ -153,8 +186,8 @@ export default function SolarEdgeApp() {
       {/* サマリーカード */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 print:grid-cols-4">
         {[
-          { label: '当月総発電量', val: '1.84', unit: 'MWh', sub: '計画比 +12%', color: 'text-emerald-600' },
-          { label: '電力自給率', val: '23.7', unit: '%', sub: '自家消費モデル', color: 'text-amber-600' },
+          { label: '選択月総発電量', val: displayActual, unit: 'MWh', sub: `計画比 ${Number(displayRatio) >= 0 ? '+' : ''}${displayRatio}%`, color: 'text-emerald-600' },
+          { label: '電力自給率', val: displaySufficiency, unit: '%', sub: '自家消費モデル', color: 'text-amber-600' },
           { label: '収益改善額', val: '442', unit: '千円', sub: '当月推定値', color: 'text-slate-800' },
           { label: '投資回収率', val: '50.0', unit: '%', sub: '初期投資比', color: 'text-blue-600' },
         ].map((kpi, i) => (
@@ -177,36 +210,44 @@ export default function SolarEdgeApp() {
         </div>
 
         <div className="h-[400px] w-full">
-          {activeTab === 4 && (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={monthlyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="month" stroke="#94a3b8" tick={{fontSize: 12}} />
-                <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
-                <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
-                <Legend />
-                <Bar dataKey="actual" name="実績 (kWh)" fill="#0f172a" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                <Line type="monotone" dataKey="sim" name="シミュレーション目標" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b' }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          )}
-          {activeTab === 5 && (
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={roiData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="year" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip />
-                <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={2} />
-                <Bar dataKey="actual" name="累計実績" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                <Line type="monotone" dataKey="sim" name="目標推移" stroke="#f59e0b" strokeWidth={3} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          )}
-          {activeTab <= 3 && (
-            <div className="h-full flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-              <p className="text-slate-400 font-medium">現在、詳細データを解析中...（Google Sheets連携時に表示）</p>
+          {isLoading ? (
+            <div className="h-full flex items-center justify-center text-slate-400 font-medium">
+              データを読み込み中...
             </div>
+          ) : (
+            <>
+              {activeTab === 4 && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={monthlyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="month" stroke="#94a3b8" tick={{fontSize: 12}} />
+                    <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
+                    <Tooltip contentStyle={{borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} />
+                    <Legend />
+                    <Bar dataKey="actual" name="実績 (kWh)" fill="#0f172a" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                    <Line type="monotone" dataKey="sim" name="シミュレーション目標" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b' }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+              {activeTab === 5 && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={roiData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="year" stroke="#94a3b8" />
+                    <YAxis stroke="#94a3b8" />
+                    <Tooltip />
+                    <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={2} />
+                    <Bar dataKey="actual" name="累計実績" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
+                    <Line type="monotone" dataKey="sim" name="目標推移" stroke="#f59e0b" strokeWidth={3} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              )}
+              {activeTab <= 3 && (
+                <div className="h-full flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="text-slate-400 font-medium">現在、詳細データを解析中...（Google Sheetsの日次詳細シートと連携時に表示）</p>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
