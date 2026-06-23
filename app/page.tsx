@@ -21,10 +21,10 @@ const dailyData = [
 
 export default function SolarEdgeApp() {
   // --- 認証・表示状態管理 ---
-  // 開発・テスト用に初期値を true に設定し、ログイン画面をスキップしています
-  const [isLoggedIn, setIsLoggedIn] = useState(true); 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  // ログイン画面を表示しつつ、最初から admin が入力された状態にしています
+  const [isLoggedIn, setIsLoggedIn] = useState(false); 
+  const [username, setUsername] = useState('admin');
+  const [password, setPassword] = useState('admin');
   const [activeTab, setActiveTab] = useState(4); 
   const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedMonth, setSelectedMonth] = useState('4');
@@ -144,8 +144,7 @@ export default function SolarEdgeApp() {
             レポート印刷
           </button>
           <button className="bg-slate-900 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg">データインポート</button>
-          {/* 開発中にログアウトしてログイン画面を確認したい場合の隠しボタン */}
-          <button onClick={() => setIsLoggedIn(false)} className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-300 transition-all">ロック確認</button>
+          <button onClick={() => setIsLoggedIn(false)} className="bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-300 transition-all">ログアウト</button>
         </div>
       </header>
 
