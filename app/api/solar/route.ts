@@ -2,15 +2,28 @@ import { NextResponse } from 'next/server';
 import { google } from 'googleapis';
 import path from 'path';
 
-// ご提示いただいたスプレッドシートIDを組み込み済みです！
 const SPREADSHEET_ID = '1x-2BMlYpsvsgr-UGceI8F98NG0ZQwCzc1F7acgZ0B6Y';
 
-const auth = new google.auth.GoogleAuth({
-  keyFile: path.join(process.cwd(), 'credentials.json'),
-  scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
+// Vercel環境（環境変数）とローカル環境（ファイル）の両方に対応する認証ロジック
+const getAuth = () => {
+  if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    return new google.auth.GoogleAuth({
+      credentials: {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      },
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+  } else {
+    return new google.auth.GoogleAuth({
+      keyFile: path.join(process.cwd(), 'credentials.json'),
+      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+    });
+  }
+};
 
-// 1. データ取得（GET）
+const auth = getAuth();
+
 export async function GET() {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
@@ -20,9 +33,7 @@ export async function GET() {
     });
 
     const rows = response.data.values;
-    if (!rows || rows.length === 0) {
-      return NextResponse.json([]);
-    }
+    if (!rows || rows.length === 0) return NextResponse.json([]);
 
     const formattedData = rows.map((row) => ({
       month: row[0] || '',
@@ -38,7 +49,6 @@ export async function GET() {
   }
 }
 
-// 2. インポートおよびデータ上書き（POST）
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -49,22 +59,16 @@ export async function POST(request: Request) {
     }
 
     const sheets = google.sheets({ version: 'v4', auth });
-
-    // 現在のシートの月一覧を取得
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: 'monthly_data!A1:A13',
     });
 
     const rows = response.data.values;
-    if (!rows) {
-      return NextResponse.json({ error: 'シートの構造が正しくありません' }, { status: 400 });
-    }
+    if (!rows) return NextResponse.json({ error: 'シート構造エラー' }, { status: 400 });
 
-    // 対象の月が何行目にあるか検索
     let rowIndex = rows.findIndex(row => row[0] === month) + 1;
 
-    // もし月が存在しない場合は新規行を追加
     if (rowIndex <= 1) {
       rowIndex = rows.length + 1;
       await sheets.spreadsheets.values.update({
@@ -75,17 +79,14 @@ export async function POST(request: Request) {
       });
     }
 
-    // C列（actual）と D列（selfSufficiency）をまとめて上書き更新
     await sheets.spreadsheets.values.update({
       spreadsheetId: SPREADSHEET_ID,
       range: `monthly_data!C${rowIndex}:D${rowIndex}`,
       valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[actual, selfSufficiency]],
-      },
+      requestBody: { values: [[actual, selfSufficiency]] },
     });
 
-    return NextResponse.json({ success: true, message: `${month}のデータを同期しました` });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Update error:', error);
     return NextResponse.json({ error: 'データの更新に失敗しました' }, { status: 500 });
