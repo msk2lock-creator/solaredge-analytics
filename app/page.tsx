@@ -2,12 +2,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Bar, Line, ReferenceLine, Scatter
+  ComposedChart, Bar, Line, ReferenceLine, ScatterChart, Scatter
 } from 'recharts';
 
 interface MonthlyDataItem {
   month: string;
-  sim: number;
   actual: number | null;
   selfSufficiency: number;
 }
@@ -21,6 +20,22 @@ interface DailyDataItem {
   gridFrom: number;
   sunlight: number;
 }
+
+// 【新設】年間発電シミュレーションの固定データ（kWh）
+const SIMULATION_DATA: Record<number, number> = {
+  1: 3582,
+  2: 4423,
+  3: 6061,
+  4: 6446,
+  5: 6768,
+  6: 5208,
+  7: 6641,
+  8: 6996,
+  9: 6548,
+  10: 5605,
+  11: 4150,
+  12: 3637
+};
 
 export default function SolarEdgeApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
@@ -155,7 +170,7 @@ export default function SolarEdgeApp() {
         });
 
         if (!res.ok) throw new Error('データ保存失敗');
-        alert(`🎉 インポート成功！\n\n気象庁のデータベースから牛深周辺の実測日照時間を自動取得し、データに統合しました。`);
+        alert(`🎉 インポート成功！\n\n気象庁のデータベースから実測日照時間を自動取得し、データに統合しました。`);
         setSelectedYear(targetYearStr);
         setSelectedMonth(targetMonthStr);
         fetchSpreadsheetData();
@@ -200,7 +215,6 @@ export default function SolarEdgeApp() {
 
   const dailyData = allDailyData.filter(d => d.yearMonth === currentTargetStr);
 
-  // --- 【新設】傾向線（最小二乗法）の計算ロジック ---
   const getTrendLineData = (dataList: DailyDataItem[], maxSunVal: number | 'auto') => {
     const validData = dataList.filter(d => d.sunlight > 0 && d.generation > 0);
     if (validData.length < 2) return [];
@@ -229,14 +243,15 @@ export default function SolarEdgeApp() {
 
   const monthTrend = getTrendLineData(dailyData, yMaxSun);
   const yearTrend = getTrendLineData(dailyDataThisYear, yMaxSun);
-  // ------------------------------------------------
 
-  const annualMonths = Array.from({length: 12}, (_, i) => `${selectedYear}年${i + 1}月`);
-  const annualChartData = annualMonths.map(mStr => {
+  // 【改修】年間発電予実のデータをシミュレーション固定値から生成するよう変更
+  const annualMonths = Array.from({length: 12}, (_, i) => i + 1);
+  const annualChartData = annualMonths.map(monthNum => {
+    const mStr = `${selectedYear}年${monthNum}月`;
     const found = monthlyData.find(d => d.month === mStr);
     return {
-      monthLabel: mStr.replace(`${selectedYear}年`, ''),
-      sim: found?.sim || 0,
+      monthLabel: `${monthNum}月`,
+      sim: SIMULATION_DATA[monthNum], // スプレッドシートではなく固定値を参照
       actual: found?.actual || null
     };
   });
@@ -258,7 +273,12 @@ export default function SolarEdgeApp() {
   
   const displayActual = currentTarget && currentTarget.actual !== null ? (currentTarget.actual / 1000).toFixed(2) : "0.00";
   const displaySufficiency = currentTarget ? currentTarget.selfSufficiency.toFixed(1) : "0.0";
-  const displayRatio = currentTarget && currentTarget.actual !== null && currentTarget.sim > 0 ? ((currentTarget.actual / currentTarget.sim - 1) * 100).toFixed(1) : "0.0";
+  
+  // 【改修】計画比（％）の計算も、固定シミュレーション値を使用するように変更
+  const currentSimValue = SIMULATION_DATA[parseInt(selectedMonth)];
+  const displayRatio = currentTarget && currentTarget.actual !== null && currentSimValue > 0 
+    ? ((currentTarget.actual / currentSimValue - 1) * 100).toFixed(1) 
+    : "0.0";
 
   const roiData = [
     { year: '0年', sim: -10000, actual: -10000 },
@@ -268,11 +288,10 @@ export default function SolarEdgeApp() {
     { year: '4年', sim: -4223, actual: null },
   ];
 
-  // カスタムTooltip（日付とデータの特定をしやすくする）
   const CustomScatterTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
-      if (data.trend !== undefined) return null; // 傾向線のドットは無視
+      if (data.trend !== undefined) return null;
       return (
         <div className="bg-slate-900 text-white p-4 rounded-xl shadow-xl border border-slate-800 text-xs space-y-1">
           <p className="font-bold text-amber-400 text-sm">{data.yearMonth} {data.date}</p>
@@ -348,7 +367,6 @@ export default function SolarEdgeApp() {
           ))}
         </div>
 
-        {/* --- 表示エリア（相関図タブの場合は高さを自動拡張して2段並べる） --- */}
         <div className={`${activeTab === 3 ? 'h-auto space-y-12' : 'h-[400px]'} w-full`}>
           {isLoading ? (
             <div className="h-[400px] flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
@@ -384,10 +402,8 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
-              {/* 【改修】相関図タブ：月次と年次の2階建て構造へ進化 */}
               {activeTab === 3 && dailyData.length > 0 && (
                 <div className="space-y-12">
-                  {/* 上段：月次相関図 */}
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <h3 className="text-sm font-bold text-slate-500 mb-4">📊 {selectedMonth}月度 日次相関分析（傾向線・日付特定機能付き）</h3>
                     <div className="h-[350px] w-full">
@@ -407,7 +423,6 @@ export default function SolarEdgeApp() {
                     </div>
                   </div>
 
-                  {/* 下段：年次相関図（新設） */}
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <h3 className="text-sm font-bold text-slate-500 mb-4">📅 {selectedYear}年 年間日次相関分析（通期トレンド・外れ値抽出）</h3>
                     <div className="h-[350px] w-full">
