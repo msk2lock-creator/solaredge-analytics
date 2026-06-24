@@ -26,14 +26,11 @@ const auth = getAuth();
 export async function GET() {
   try {
     const sheets = google.sheets({ version: 'v4', auth });
-    
-    // 月次データと日次データの両方を一気に取得
     const [monthlyRes, dailyRes] = await Promise.all([
       sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'monthly_data!A2:D100' }),
       sheets.spreadsheets.values.get({ spreadsheetId: SPREADSHEET_ID, range: 'daily_data!A2:G3000' }).catch(() => ({ data: { values: null } }))
     ]);
 
-    // 月次データの整形
     const monthlyRows = monthlyRes.data.values || [];
     const formattedMonthly = monthlyRows.map((row) => ({
       month: row[0] || '',
@@ -42,7 +39,6 @@ export async function GET() {
       selfSufficiency: row[3] ? Number(row[3]) : 0,
     }));
 
-    // 日次データの整形
     const dailyRows = dailyRes.data?.values || [];
     const formattedDaily = dailyRows.map((row) => ({
       yearMonth: row[0] || '',
@@ -72,7 +68,7 @@ export async function POST(request: Request) {
 
     const sheets = google.sheets({ version: 'v4', auth });
     
-    // 1. 月次データの更新（これまで通り）
+    // 1. 月次データの更新
     const monthlyRes = await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: 'monthly_data!A1:A100',
@@ -97,18 +93,45 @@ export async function POST(request: Request) {
       requestBody: { values: [[actual, selfSufficiency]] },
     });
 
-    // 2. 日次データの保存（新規追加）
+    // 2. 日次データの保存（重複排除と時系列ソート）
     if (dailyData && Array.isArray(dailyData) && dailyData.length > 0) {
-      const dailyRows = dailyData.map((d: any) => [
-        d.yearMonth, d.date, d.generation, d.consumption, d.solarFrom, d.gridFrom, d.sunlight || 0
-      ]);
-      
-      // daily_dataシートの一番下に追記していく
-      await sheets.spreadsheets.values.append({
+      const existingDailyRes = await sheets.spreadsheets.values.get({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'daily_data!A1',
+        range: 'daily_data!A2:G',
+      });
+      const existingRows = existingDailyRes.data.values || [];
+      const dailyMap = new Map();
+
+      // 既存データをMapに格納（年月_日付 をキーにして重複を防ぐ）
+      existingRows.forEach(row => {
+        if (row.length > 1) {
+          dailyMap.set(`${row[0]}_${row[1]}`, row);
+        }
+      });
+
+      // 新規データをMapに上書き格納
+      dailyData.forEach((d: any) => {
+        dailyMap.set(`${d.yearMonth}_${d.date}`, [
+          d.yearMonth, d.date, d.generation, d.consumption, d.solarFrom, d.gridFrom, d.sunlight || 0
+        ]);
+      });
+
+      // 配列に戻して日付順にソート
+      const mergedRows = Array.from(dailyMap.values()).sort((a, b) => {
+        const ym1 = a[0].match(/(\d{4})年(\d+)月/);
+        const ym2 = b[0].match(/(\d{4})年(\d+)月/);
+        const t1 = ym1 ? parseInt(ym1[1]) * 10000 + parseInt(ym1[2]) * 100 + parseInt(a[1].split('/')[1] || 0) : 0;
+        const t2 = ym2 ? parseInt(ym2[1]) * 10000 + parseInt(ym2[2]) * 100 + parseInt(b[1].split('/')[1] || 0) : 0;
+        return t1 - t2;
+      });
+
+      // シートを一度クリアしてから綺麗なソート済みデータを書き込む
+      await sheets.spreadsheets.values.clear({ spreadsheetId: SPREADSHEET_ID, range: 'daily_data!A2:G' });
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: 'daily_data!A2',
         valueInputOption: 'USER_ENTERED',
-        requestBody: { values: dailyRows },
+        requestBody: { values: mergedRows },
       });
     }
 
