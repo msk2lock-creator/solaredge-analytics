@@ -152,30 +152,54 @@ export default function SolarEdgeApp() {
   const currentTargetStr = `${selectedYear}年${selectedMonth}月`;
   const lastYearTargetStr = `${Number(selectedYear) - 1}年${selectedMonth}月`;
 
-  // 日次データの抽出
-  const dailyData = allDailyData.filter(d => d.yearMonth === currentTargetStr);
+  // --- 【改修】Y軸のスケール固定用ロジック ---
+  // ① 選択年の1年分の日次データを抽出して、日次の最大値を計算
+  const dailyDataThisYear = allDailyData.filter(d => d.yearMonth.startsWith(`${selectedYear}年`));
+  const maxDailyConsumption = Math.max(0, ...dailyDataThisYear.map(d => d.consumption));
+  const maxDailyGeneration = Math.max(0, ...dailyDataThisYear.map(d => d.generation));
+  const maxDailySunlight = Math.max(0, ...dailyDataThisYear.map(d => d.sunlight));
 
-  // 【改修】年間発電予実データ（1月〜12月固定）
-  const annualMonths = Array.from({length: 12}, (_, i) => `${selectedYear}年${i + 1}月`);
-  const annualChartData = annualMonths.map(mStr => {
-    const found = monthlyData.find(d => d.month === mStr);
-    return {
-      monthLabel: mStr.replace(`${selectedYear}年`, ''),
-      sim: found?.sim || 0, // ※シミュレーション値がDBになければ0
-      actual: found?.actual || null
-    };
-  });
+  // 少しだけゆとり（10%）を持たせた最大値を設定
+  const yMaxCons = maxDailyConsumption > 0 ? Math.ceil(maxDailyConsumption * 1.1) : 'auto';
+  const yMaxGen = maxDailyGeneration > 0 ? Math.ceil(maxDailyGeneration * 1.1) : 'auto';
+  const yMaxSun = maxDailySunlight > 0 ? Math.ceil(maxDailySunlight * 1.1) : 'auto';
 
-  // 【改修】前年同月比較（サマリー型）の集計
-  const rawDailyThisYear = allDailyData.filter(d => d.yearMonth === currentTargetStr);
-  const rawDailyLastYear = allDailyData.filter(d => d.yearMonth === lastYearTargetStr);
-
+  // ② 月次サマリーの最大値を計算（1年間を通した最大の棒グラフの高さを探す）
   const aggregate = (data: DailyDataItem[]) => data.reduce((acc, curr) => ({
     generation: acc.generation + curr.generation,
     consumption: acc.consumption + curr.consumption,
     solarFrom: acc.solarFrom + curr.solarFrom,
     gridFrom: acc.gridFrom + curr.gridFrom,
   }), { generation: 0, consumption: 0, solarFrom: 0, gridFrom: 0 });
+
+  let maxMonthlyOverall = 0;
+  for (let m = 1; m <= 12; m++) {
+    const tData = aggregate(allDailyData.filter(d => d.yearMonth === `${selectedYear}年${m}月`));
+    const lData = aggregate(allDailyData.filter(d => d.yearMonth === `${Number(selectedYear)-1}年${m}月`));
+    const maxInMonth = Math.max(
+      tData.generation, tData.consumption, tData.solarFrom, tData.gridFrom,
+      lData.generation, lData.consumption, lData.solarFrom, lData.gridFrom
+    );
+    if (maxInMonth > maxMonthlyOverall) maxMonthlyOverall = maxInMonth;
+  }
+  const yMaxSummary = maxMonthlyOverall > 0 ? Math.ceil(maxMonthlyOverall * 1.1) : 'auto';
+  // ------------------------------------------
+
+  // 現在の月の日次データ
+  const dailyData = allDailyData.filter(d => d.yearMonth === currentTargetStr);
+
+  const annualMonths = Array.from({length: 12}, (_, i) => `${selectedYear}年${i + 1}月`);
+  const annualChartData = annualMonths.map(mStr => {
+    const found = monthlyData.find(d => d.month === mStr);
+    return {
+      monthLabel: mStr.replace(`${selectedYear}年`, ''),
+      sim: found?.sim || 0,
+      actual: found?.actual || null
+    };
+  });
+
+  const rawDailyThisYear = allDailyData.filter(d => d.yearMonth === currentTargetStr);
+  const rawDailyLastYear = allDailyData.filter(d => d.yearMonth === lastYearTargetStr);
 
   const aggThis = aggregate(rawDailyThisYear);
   const aggLast = aggregate(rawDailyLastYear);
@@ -270,12 +294,14 @@ export default function SolarEdgeApp() {
             <div className="h-full flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
           ) : (
             <>
+              {/* --- Y軸の domain=[0, yMax〇〇] を追加してスケールを固定 --- */}
+              
               {activeTab === 1 && dailyData.length > 0 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
-                    <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
+                    <YAxis stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxCons]} />
                     <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
                     <Bar dataKey="solarFrom" stackId="a" name="太陽光から (自家消費 kWh)" fill="#10b981" maxBarSize={40} />
@@ -284,13 +310,14 @@ export default function SolarEdgeApp() {
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
+              
               {activeTab === 2 && dailyData.length > 0 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
-                    <YAxis yAxisId="left" stroke="#94a3b8" tick={{fontSize: 12}} />
-                    <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" tick={{fontSize: 12}} />
+                    <YAxis yAxisId="left" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxGen]} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxSun]} />
                     <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
                     <Bar yAxisId="left" dataKey="generation" name="日次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -299,13 +326,12 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
               
-              {/* 【新設】前年同月比較（サマリー型） */}
               {activeTab === 3 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={yoySummaryData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="name" stroke="#94a3b8" tick={{fontSize: 14, fontWeight: 'bold'}} />
-                    <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
+                    <YAxis stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxSummary]} />
                     <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
                     <Bar dataKey="前年同月" fill="#cbd5e1" radius={[4, 4, 0, 0]} maxBarSize={60} />
@@ -320,7 +346,6 @@ export default function SolarEdgeApp() {
                 </div>
               )}
 
-              {/* 【改修】年間発電予実グラフ（12ヶ月固定枠） */}
               {activeTab === 4 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={annualChartData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
