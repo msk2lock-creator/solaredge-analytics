@@ -124,7 +124,6 @@ export default function SolarEdgeApp() {
         }
       }
 
-      // ② 気象庁のWebサイトから日照時間を自動スクレイピングして合体
       try {
         const weatherRes = await fetch(`/api/weather?year=${targetYearStr}&month=${targetMonthStr}`);
         if (weatherRes.ok) {
@@ -133,7 +132,6 @@ export default function SolarEdgeApp() {
             const dayMatch = d.date.match(/(\d+)[^0-9]*$/); 
             if (dayMatch) {
               const day = parseInt(dayMatch[1], 10);
-              // スプレッドシートの該当日付に、取得した日照時間をセット
               if (sunshineData[day] !== undefined) {
                 d.sunlight = sunshineData[day];
               }
@@ -144,7 +142,6 @@ export default function SolarEdgeApp() {
         console.warn("気象庁データの取得に失敗しました", weatherErr);
       }
 
-      // ③ 合体した完全なデータをスプレッドシートへ送信
       try {
         const res = await fetch('/api/solar', {
           method: 'POST',
@@ -158,7 +155,7 @@ export default function SolarEdgeApp() {
         });
 
         if (!res.ok) throw new Error('データ保存失敗');
-        alert(`🎉 インポート成功！\n\n気象庁のデータベースから熊本市周辺の実測日照時間を自動取得し、データに統合しました。`);
+        alert(`🎉 インポート成功！\n\n気象庁のデータベースから牛深周辺の実測日照時間を自動取得し、データに統合しました。`);
         setSelectedYear(targetYearStr);
         setSelectedMonth(targetMonthStr);
         fetchSpreadsheetData();
@@ -334,7 +331,8 @@ export default function SolarEdgeApp() {
                     <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
                     <Bar yAxisId="left" dataKey="generation" name="日次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Line yAxisId="right" type="monotone" dataKey="sunlight" name="日照時間 (時間)" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                    {/* ここで dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} を追加して点を見やすくしました */}
+                    <Line yAxisId="right" type="monotone" dataKey="sunlight" name="日照時間 (時間)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
