@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Bar, Line, ReferenceLine, ScatterChart, Scatter
+  ComposedChart, Bar, Line, ReferenceLine, Scatter
 } from 'recharts';
 
 interface MonthlyDataItem {
@@ -21,20 +21,9 @@ interface DailyDataItem {
   sunlight: number;
 }
 
-// 【新設】年間発電シミュレーションの固定データ（kWh）
 const SIMULATION_DATA: Record<number, number> = {
-  1: 3582,
-  2: 4423,
-  3: 6061,
-  4: 6446,
-  5: 6768,
-  6: 5208,
-  7: 6641,
-  8: 6996,
-  9: 6548,
-  10: 5605,
-  11: 4150,
-  12: 3637
+  1: 3582, 2: 4423, 3: 6061, 4: 6446, 5: 6768, 6: 5208,
+  7: 6641, 8: 6996, 9: 6548, 10: 5605, 11: 4150, 12: 3637
 };
 
 export default function SolarEdgeApp() {
@@ -170,7 +159,7 @@ export default function SolarEdgeApp() {
         });
 
         if (!res.ok) throw new Error('データ保存失敗');
-        alert(`🎉 インポート成功！\n\n気象庁のデータベースから実測日照時間を自動取得し、データに統合しました。`);
+        alert(`🎉 インポート成功！\n\n気象庁のデータベースから牛深周辺の実測日照時間を自動取得し、データに統合しました。`);
         setSelectedYear(targetYearStr);
         setSelectedMonth(targetMonthStr);
         fetchSpreadsheetData();
@@ -244,14 +233,13 @@ export default function SolarEdgeApp() {
   const monthTrend = getTrendLineData(dailyData, yMaxSun);
   const yearTrend = getTrendLineData(dailyDataThisYear, yMaxSun);
 
-  // 【改修】年間発電予実のデータをシミュレーション固定値から生成するよう変更
   const annualMonths = Array.from({length: 12}, (_, i) => i + 1);
   const annualChartData = annualMonths.map(monthNum => {
     const mStr = `${selectedYear}年${monthNum}月`;
     const found = monthlyData.find(d => d.month === mStr);
     return {
       monthLabel: `${monthNum}月`,
-      sim: SIMULATION_DATA[monthNum], // スプレッドシートではなく固定値を参照
+      sim: SIMULATION_DATA[monthNum],
       actual: found?.actual || null
     };
   });
@@ -273,8 +261,6 @@ export default function SolarEdgeApp() {
   
   const displayActual = currentTarget && currentTarget.actual !== null ? (currentTarget.actual / 1000).toFixed(2) : "0.00";
   const displaySufficiency = currentTarget ? currentTarget.selfSufficiency.toFixed(1) : "0.0";
-  
-  // 【改修】計画比（％）の計算も、固定シミュレーション値を使用するように変更
   const currentSimValue = SIMULATION_DATA[parseInt(selectedMonth)];
   const displayRatio = currentTarget && currentTarget.actual !== null && currentSimValue > 0 
     ? ((currentTarget.actual / currentSimValue - 1) * 100).toFixed(1) 
@@ -414,9 +400,10 @@ export default function SolarEdgeApp() {
                           <YAxis type="number" dataKey="generation" name="発電量" unit="kWh" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxGen]} />
                           <Tooltip content={CustomScatterTooltip} />
                           <Legend />
-                          <Scatter name="各日の実測値" data={dailyData} fill="#3b82f6" />
+                          {/* 【改修】散布図の点を見やすくカスタマイズ（fill, r:5など） */}
+                          <Scatter name="各日の実測値" data={dailyData} fill="#3b82f6" shape="circle" fillOpacity={0.8} />
                           {monthTrend.length > 0 && (
-                            <Line data={monthTrend} type="monotone" dataKey="trend" name="標準傾向線（この線から離れた点が外れ値）" stroke="#f43f5e" strokeWidth={2} dot={false} activeDot={false} />
+                            <Line data={monthTrend} type="monotone" dataKey="trend" name="標準傾向線" stroke="#f43f5e" strokeWidth={2} dot={{ r: 5, fill: '#f43f5e', stroke: '#fff', strokeWidth: 2 }} activeDot={false} />
                           )}
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -435,7 +422,7 @@ export default function SolarEdgeApp() {
                           <Legend />
                           <Scatter name="年間の全日次データ" data={dailyDataThisYear} fill="#64748b" opacity={0.6} />
                           {yearTrend.length > 0 && (
-                            <Line data={yearTrend} type="monotone" dataKey="trend" name="年間通期傾向線" stroke="#10b981" strokeWidth={2} dot={false} activeDot={false} />
+                            <Line data={yearTrend} type="monotone" dataKey="trend" name="年間通期傾向線" stroke="#10b981" strokeWidth={2} dot={{ r: 5, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }} activeDot={false} />
                           )}
                         </ComposedChart>
                       </ResponsiveContainer>
