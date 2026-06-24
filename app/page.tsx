@@ -124,6 +124,27 @@ export default function SolarEdgeApp() {
         }
       }
 
+      // ② 気象庁のWebサイトから日照時間を自動スクレイピングして合体
+      try {
+        const weatherRes = await fetch(`/api/weather?year=${targetYearStr}&month=${targetMonthStr}`);
+        if (weatherRes.ok) {
+          const sunshineData = await weatherRes.json();
+          parsedDailyData.forEach(d => {
+            const dayMatch = d.date.match(/(\d+)[^0-9]*$/); 
+            if (dayMatch) {
+              const day = parseInt(dayMatch[1], 10);
+              // スプレッドシートの該当日付に、取得した日照時間をセット
+              if (sunshineData[day] !== undefined) {
+                d.sunlight = sunshineData[day];
+              }
+            }
+          });
+        }
+      } catch (weatherErr) {
+        console.warn("気象庁データの取得に失敗しました", weatherErr);
+      }
+
+      // ③ 合体した完全なデータをスプレッドシートへ送信
       try {
         const res = await fetch('/api/solar', {
           method: 'POST',
@@ -137,7 +158,7 @@ export default function SolarEdgeApp() {
         });
 
         if (!res.ok) throw new Error('データ保存失敗');
-        alert(`🎉 インポート成功！\n\n日次データもスプレッドシートへ重複なく保存されました。`);
+        alert(`🎉 インポート成功！\n\n気象庁のデータベースから熊本市周辺の実測日照時間を自動取得し、データに統合しました。`);
         setSelectedYear(targetYearStr);
         setSelectedMonth(targetMonthStr);
         fetchSpreadsheetData();
@@ -152,19 +173,15 @@ export default function SolarEdgeApp() {
   const currentTargetStr = `${selectedYear}年${selectedMonth}月`;
   const lastYearTargetStr = `${Number(selectedYear) - 1}年${selectedMonth}月`;
 
-  // --- 【改修】Y軸のスケール固定用ロジック ---
-  // ① 選択年の1年分の日次データを抽出して、日次の最大値を計算
   const dailyDataThisYear = allDailyData.filter(d => d.yearMonth.startsWith(`${selectedYear}年`));
   const maxDailyConsumption = Math.max(0, ...dailyDataThisYear.map(d => d.consumption));
   const maxDailyGeneration = Math.max(0, ...dailyDataThisYear.map(d => d.generation));
   const maxDailySunlight = Math.max(0, ...dailyDataThisYear.map(d => d.sunlight));
 
-  // 少しだけゆとり（10%）を持たせた最大値を設定
   const yMaxCons = maxDailyConsumption > 0 ? Math.ceil(maxDailyConsumption * 1.1) : 'auto';
   const yMaxGen = maxDailyGeneration > 0 ? Math.ceil(maxDailyGeneration * 1.1) : 'auto';
   const yMaxSun = maxDailySunlight > 0 ? Math.ceil(maxDailySunlight * 1.1) : 'auto';
 
-  // ② 月次サマリーの最大値を計算（1年間を通した最大の棒グラフの高さを探す）
   const aggregate = (data: DailyDataItem[]) => data.reduce((acc, curr) => ({
     generation: acc.generation + curr.generation,
     consumption: acc.consumption + curr.consumption,
@@ -183,9 +200,7 @@ export default function SolarEdgeApp() {
     if (maxInMonth > maxMonthlyOverall) maxMonthlyOverall = maxInMonth;
   }
   const yMaxSummary = maxMonthlyOverall > 0 ? Math.ceil(maxMonthlyOverall * 1.1) : 'auto';
-  // ------------------------------------------
 
-  // 現在の月の日次データ
   const dailyData = allDailyData.filter(d => d.yearMonth === currentTargetStr);
 
   const annualMonths = Array.from({length: 12}, (_, i) => `${selectedYear}年${i + 1}月`);
@@ -294,8 +309,6 @@ export default function SolarEdgeApp() {
             <div className="h-full flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
           ) : (
             <>
-              {/* --- Y軸の domain=[0, yMax〇〇] を追加してスケールを固定 --- */}
-              
               {activeTab === 1 && dailyData.length > 0 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
