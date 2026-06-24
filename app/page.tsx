@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Bar, Line, ReferenceLine
+  ComposedChart, Bar, Line, ReferenceLine, ScatterChart, Scatter
 } from 'recharts';
 
 interface MonthlyDataItem {
@@ -24,7 +24,7 @@ interface DailyDataItem {
 
 export default function SolarEdgeApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
-  const [activeTab, setActiveTab] = useState(4); 
+  const [activeTab, setActiveTab] = useState(5); // 年間:発電予実（インデックス5に移動）を初期表示
   
   const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedMonth, setSelectedMonth] = useState('4');
@@ -294,7 +294,7 @@ export default function SolarEdgeApp() {
 
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8">
         <div className="flex flex-wrap gap-4 mb-8 border-b border-slate-100 pb-4 print:hidden">
-          {['日次:消費電力', '日次:発電/日照', '前年同月比較', '年間:発電予実', '投資回収'].map((t, i) => (
+          {['日次:消費電力', '日次:発電/日照', '相関図', '前年同月比較', '年間:発電予実', '投資回収'].map((t, i) => (
             <button key={i} onClick={() => setActiveTab(i+1)} className={`py-2 px-4 rounded-xl text-sm font-bold transition-all ${activeTab === i+1 ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-50'}`}>
               {t}
             </button>
@@ -331,13 +331,26 @@ export default function SolarEdgeApp() {
                     <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
                     <Bar yAxisId="left" dataKey="generation" name="日次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    {/* ここで dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} を追加して点を見やすくしました */}
                     <Line yAxisId="right" type="monotone" dataKey="sunlight" name="日照時間 (時間)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
+
+              {/* 【復活】相関図（散布図モデル） */}
+              {activeTab === 3 && dailyData.length > 0 && (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis type="number" dataKey="sunlight" name="日照時間" unit="時間" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxSun]} />
+                    <YAxis type="number" dataKey="generation" name="発電量" unit="kWh" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxGen]} />
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{borderRadius: '16px', border: 'none'}} />
+                    <Legend />
+                    <Scatter name="日ごとの相関データ（牛深実測値）" data={dailyData} fill="#f59e0b" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              )}
               
-              {activeTab === 3 && (
+              {activeTab === 4 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={yoySummaryData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -351,13 +364,13 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
-              {activeTab <= 2 && dailyData.length === 0 && (
+              {activeTab <= 3 && dailyData.length === 0 && (
                 <div className="h-full flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   <p className="text-slate-400 font-medium">対象月の日次データがありません。CSVをインポートしてください。</p>
                 </div>
               )}
 
-              {activeTab === 4 && (
+              {activeTab === 5 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={annualChartData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -371,7 +384,7 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
-              {activeTab === 5 && (
+              {activeTab === 6 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={roiData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
