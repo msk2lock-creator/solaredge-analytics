@@ -21,6 +21,7 @@ interface DailyDataItem {
   sunlight: number;
 }
 
+// 固定シミュレーションデータ
 const SIMULATION_DATA: Record<number, number> = {
   1: 3582, 2: 4423, 3: 6061, 4: 6446, 5: 6768, 6: 5208,
   7: 6641, 8: 6996, 9: 6548, 10: 5605, 11: 4150, 12: 3637
@@ -400,7 +401,6 @@ export default function SolarEdgeApp() {
                           <YAxis type="number" dataKey="generation" name="発電量" unit="kWh" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxGen]} />
                           <Tooltip content={CustomScatterTooltip} />
                           <Legend />
-                          {/* 【改修】散布図の点を見やすくカスタマイズ（fill, r:5など） */}
                           <Scatter name="各日の実測値" data={dailyData} fill="#3b82f6" shape="circle" fillOpacity={0.8} />
                           {monthTrend.length > 0 && (
                             <Line data={monthTrend} type="monotone" dataKey="trend" name="標準傾向線" stroke="#f43f5e" strokeWidth={2} dot={{ r: 5, fill: '#f43f5e', stroke: '#fff', strokeWidth: 2 }} activeDot={false} />
@@ -460,7 +460,8 @@ export default function SolarEdgeApp() {
                     <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
                     <Bar dataKey="actual" name="実績 (kWh)" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                    <Line type="monotone" dataKey="sim" name="シミュレーション目標" stroke="#f59e0b" strokeWidth={3} dot={false} />
+                    {/* 【改修】ドットを追加しました */}
+                    <Line type="monotone" dataKey="sim" name="シミュレーション目標" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
