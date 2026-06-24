@@ -11,8 +11,8 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 牛深特別地域気象観測所（天草地方）の過去データURL
-    const url = `https://www.data.jma.go.jp/obd/stats/etrn/view/daily_s1.php?prec_no=86&block_no=47848&year=${year}&month=${month}&day=&view=`;
+    // 牛深特別地域気象観測所（天草地方）の過去データURL（block_noを正しく47838に修正）
+    const url = `https://www.data.jma.go.jp/obd/stats/etrn/view/daily_s1.php?prec_no=86&block_no=47838&year=${year}&month=${month}&day=&view=`;
     console.log(`[Weather API] 気象庁へアクセス中... URL: ${url}`);
 
     // ロボット弾き（403エラー）を回避するため、一般的なWebブラウザからのアクセスを装う
