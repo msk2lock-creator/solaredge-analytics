@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  ComposedChart, Bar, Line, ReferenceLine, Scatter
+  ComposedChart, Bar, Line, ReferenceLine, ScatterChart, Scatter
 } from 'recharts';
 
 interface MonthlyDataItem {
@@ -26,7 +26,6 @@ const SIMULATION_DATA: Record<number, number> = {
   7: 6641, 8: 6996, 9: 6548, 10: 5605, 11: 4150, 12: 3637
 };
 
-// 英語の月名を数字に変換するための辞書
 const EN_MONTH_MAP: Record<string, string> = {
   Jan: '1', Feb: '2', Mar: '3', Apr: '4', May: '5', Jun: '6',
   Jul: '7', Aug: '8', Sep: '9', Oct: '10', Nov: '11', Dec: '12'
@@ -42,7 +41,14 @@ export default function SolarEdgeApp() {
   const [monthlyData, setMonthlyData] = useState<MonthlyDataItem[]>([]);
   const [allDailyData, setAllDailyData] = useState<DailyDataItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [mounted, setMounted] = useState(false); // 【新設】ハイドレーション制限エラーを防止するマウント状態管理
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 初回マウント時にのみ実行
+  useEffect(() => {
+    setMounted(true);
+    fetchSpreadsheetData();
+  }, []);
 
   const fetchSpreadsheetData = async () => {
     try {
@@ -58,10 +64,6 @@ export default function SolarEdgeApp() {
       setIsLoading(false);
     }
   };
-
-  useEffect(() => {
-    fetchSpreadsheetData();
-  }, []);
 
   const handlePrevMonth = () => {
     let y = parseInt(selectedYear);
@@ -117,15 +119,12 @@ export default function SolarEdgeApp() {
 
         totalGenMwh += genValue; totalConsMwh += consValue; totalSolarMwh += solarValue;
 
-        // 年月の抽出（日本語・英語両対応）
         if (!targetMonthStr && timeValue) {
-          // パターン1: 2026年06月, 2026/06
           const jpMatch = timeValue.match(/(\d{4})[年\/\-]0?(\d{1,2})[月\/\-]?/);
           if (jpMatch) { 
             targetYearStr = jpMatch[1]; 
             targetMonthStr = parseInt(jpMatch[2], 10).toString();
           } else {
-            // パターン2: "Jun 1, 2026" (英語フォーマット)
             const enMatch = timeValue.match(/([A-Z][a-z]{2}) \d{1,2}, (\d{4})/);
             if (enMatch && EN_MONTH_MAP[enMatch[1]]) {
               targetYearStr = enMatch[2];
@@ -135,9 +134,8 @@ export default function SolarEdgeApp() {
         }
 
         if (timeValue) {
-          let formattedDate = timeValue.split(' ')[0]; // デフォルトフォールバック
+          let formattedDate = timeValue.split(' ')[0];
           
-          // 日付の抽出と整形
           const jpDateMatch = timeValue.match(/(\d{4})[年\/\-]0?(\d{1,2})[月\/\-]0?(\d{1,2})日?/);
           if (jpDateMatch) {
             formattedDate = `${jpDateMatch[2]}月${jpDateMatch[3]}日`;
@@ -391,7 +389,8 @@ export default function SolarEdgeApp() {
         </div>
 
         <div className={`${activeTab === 3 ? 'h-auto space-y-12' : 'h-[400px]'} w-full`}>
-          {isLoading ? (
+          {/* 【修正】mounted状態も同時に監視。完全に画面構成の準備ができるまでフライング描画をストップ */}
+          {isLoading || !mounted ? (
             <div className="h-[400px] flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
           ) : (
             <>
@@ -425,13 +424,14 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
+              {/* 【修正】ComposedChartの数値軸バグを避けるため、相関図（散布図）専用の「ScatterChart」コンポーネントに統一 */}
               {activeTab === 3 && dailyData.length > 0 && (
                 <div className="space-y-12">
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <h3 className="text-sm font-bold text-slate-500 mb-4">📊 {selectedMonth}月度 日次相関分析（傾向線・日付特定機能付き）</h3>
                     <div className="h-[350px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                        <ScatterChart margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis type="number" dataKey="sunlight" name="日照時間" unit="h" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxSun]} />
                           <YAxis type="number" dataKey="generation" name="発電量" unit="kWh" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxGen]} />
@@ -441,7 +441,7 @@ export default function SolarEdgeApp() {
                           {monthTrend.length > 0 && (
                             <Line data={monthTrend} type="monotone" dataKey="trend" name="標準傾向線" stroke="#f43f5e" strokeWidth={2} dot={{ r: 5, fill: '#f43f5e', stroke: '#fff', strokeWidth: 2 }} activeDot={false} />
                           )}
-                        </ComposedChart>
+                        </ScatterChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
@@ -450,7 +450,7 @@ export default function SolarEdgeApp() {
                     <h3 className="text-sm font-bold text-slate-500 mb-4">📅 {selectedYear}年 年間日次相関分析（通期トレンド・外れ値抽出）</h3>
                     <div className="h-[350px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                        <ScatterChart margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis type="number" dataKey="sunlight" name="日照時間" unit="h" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxSun]} />
                           <YAxis type="number" dataKey="generation" name="発電量" unit="kWh" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxGen]} />
@@ -460,7 +460,7 @@ export default function SolarEdgeApp() {
                           {yearTrend.length > 0 && (
                             <Line data={yearTrend} type="monotone" dataKey="trend" name="年間通期傾向線" stroke="#10b981" strokeWidth={2} dot={{ r: 5, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }} activeDot={false} />
                           )}
-                        </ComposedChart>
+                        </ScatterChart>
                       </ResponsiveContainer>
                     </div>
                   </div>
