@@ -97,8 +97,7 @@ export default function SolarEdgeApp() {
     let m = parseInt(selectedMonth);
     if (isNaN(m) || isNaN(y)) return;
     if (m === 12) { m = 1; y += 1; }
-    // 【修正】ここが m -= 1 になっていた致命的タイポを修正しました
-    else { m += 1; } 
+    else { m += 1; }
     setSelectedYear(y.toString());
     setSelectedMonth(m.toString());
   };
@@ -284,7 +283,6 @@ export default function SolarEdgeApp() {
   });
 
   const maxMonthlyConsumption = Math.max(0, ...monthlyChartDataExtended.map(d => d.consumption || 0));
-  // 【修正】シミュレーション目標線の削除に伴い、Y軸の最大値計算からsimを除外
   const maxMonthlyGeneration = Math.max(0, ...monthlyChartDataExtended.map(d => d.generation || 0));
   const maxMonthlySunlight = Math.max(0, ...monthlyChartDataExtended.map(d => d.sunlight || 0));
 
@@ -391,33 +389,46 @@ export default function SolarEdgeApp() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 p-6 md:p-10">
+    <div className="min-h-screen bg-slate-50 text-slate-900 p-6 md:p-10 pt-0 md:pt-0">
       <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
-      <header className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:mb-0">
-        <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">西岡勝次商店 分析レポート</h1>
-          <div className="flex items-center gap-3 mt-3 print:hidden">
-            <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm">
-              <button onClick={handlePrevMonth} className="px-3 py-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-l-lg border-r border-slate-200 transition-colors">◀</button>
-              <div className="flex items-center px-3">
-                <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent font-bold outline-none cursor-pointer text-sm">
-                  {[2025, 2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>{y}年</option>)}
-                </select>
-                <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent font-bold outline-none cursor-pointer text-sm ml-1">
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月度実績</option>)}
-                </select>
+      {/* 📌 改修部分：KPI表示枠より上を固定（sticky）化し、タブボタンを内包 */}
+      <div className="sticky top-0 z-50 bg-slate-50 pt-6 md:pt-10 pb-4 border-b border-slate-200/60 -mx-6 md:-mx-10 px-6 md:px-10 mb-8 print:relative print:border-none print:p-0 print:m-0">
+        <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:mb-0">
+          <div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">西岡勝次商店 分析レポート</h1>
+            <div className="flex items-center gap-3 mt-3 print:hidden">
+              <div className="flex items-center bg-white border border-slate-200 rounded-lg shadow-sm">
+                <button onClick={handlePrevMonth} className="px-3 py-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-l-lg border-r border-slate-200 transition-colors">◀</button>
+                <div className="flex items-center px-3">
+                  <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="bg-transparent font-bold outline-none cursor-pointer text-sm">
+                    {[2025, 2026, 2027, 2028, 2029, 2030].map(y => <option key={y} value={y}>{y}年</option>)}
+                  </select>
+                  <select value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)} className="bg-transparent font-bold outline-none cursor-pointer text-sm ml-1">
+                    {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{m}月度実績</option>)}
+                  </select>
+                </div>
+                <button onClick={handleNextMonth} className="px-3 py-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-r-lg border-l border-slate-200 transition-colors">▶</button>
               </div>
-              <button onClick={handleNextMonth} className="px-3 py-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-50 rounded-r-lg border-l border-slate-200 transition-colors">▶</button>
+              <button onClick={fetchSpreadsheetData} className="text-xs bg-slate-200 hover:bg-slate-300 px-3 py-2 rounded-lg font-bold text-slate-700 transition-all">🔄 同期</button>
             </div>
-            <button onClick={fetchSpreadsheetData} className="text-xs bg-slate-200 hover:bg-slate-300 px-3 py-2 rounded-lg font-bold text-slate-700 transition-all">🔄 同期</button>
           </div>
-        </div>
-        <div className="flex gap-3 print:hidden">
-          <button onClick={() => fileInputRef.current?.click()} className="bg-slate-900 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg">データインポート</button>
-        </div>
-      </header>
+          <div className="flex gap-3 print:hidden">
+            <button onClick={() => fileInputRef.current?.click()} className="bg-slate-900 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg">データインポート</button>
+          </div>
+        </header>
 
+        {/* 📌 改修部分：タブ選択ボタン群を上部に配置移動 */}
+        <div className="flex flex-wrap gap-3 mt-6 print:hidden">
+          {['日次データ', '月次データ', '相関図', '前年同月比較', '年間:発電予実', '投資回収'].map((t, i) => (
+            <button key={i} onClick={() => setActiveTab(i+1)} className={`py-2 px-4 rounded-xl text-sm font-bold transition-all border ${activeTab === i+1 ? 'bg-slate-900 text-white border-slate-900 shadow-sm' : 'bg-white text-slate-400 border-slate-200 hover:bg-slate-100'}`}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 📊 KPI表示枠 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8 print:grid-cols-4">
         {[
           { label: '選択月総発電量', val: displayActual, unit: 'MWh', sub: `計画比 ${Number(displayRatio) >= 0 ? '+' : ''}${displayRatio}%`, color: 'text-emerald-600' },
@@ -432,20 +443,14 @@ export default function SolarEdgeApp() {
         ))}
       </div>
 
+      {/* 📉 グラフ表示枠（グラフ描画エリアのみにスリム化） */}
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8">
-        <div className="flex flex-wrap gap-4 mb-8 border-b border-slate-100 pb-4 print:hidden">
-          {['日次データ', '月次データ', '相関図', '前年同月比較', '年間:発電予実', '投資回収'].map((t, i) => (
-            <button key={i} onClick={() => setActiveTab(i+1)} className={`py-2 px-4 rounded-xl text-sm font-bold transition-all ${activeTab === i+1 ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-50'}`}>
-              {t}
-            </button>
-          ))}
-        </div>
-
         <div className={`${(activeTab === 1 || activeTab === 2 || activeTab === 3) ? 'h-auto space-y-12' : 'h-[400px]'} w-full`}>
           {isLoading || !mounted ? (
             <div className="h-[400px] flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
           ) : (
             <>
+              {/* タブ1：日次データ */}
               {activeTab === 1 && dailyData.length > 0 && (
                 <div className="space-y-12">
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
@@ -487,6 +492,7 @@ export default function SolarEdgeApp() {
                 </div>
               )}
 
+              {/* タブ2：月次データ */}
               {activeTab === 2 && (
                 <div className="space-y-12">
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
@@ -520,7 +526,6 @@ export default function SolarEdgeApp() {
                           <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                           <Legend />
                           <Bar yAxisId="left" dataKey="generation" name="月次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                          {/* 【修正】目標線を外すリクエストに対応し、Line要素を削除しました */}
                           <Line yAxisId="right" type="monotone" dataKey="sunlight" name="月次総日照時間 (時間)" stroke="#eab308" strokeWidth={2} dot={{ r: 4, fill: '#eab308', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -529,6 +534,7 @@ export default function SolarEdgeApp() {
                 </div>
               )}
               
+              {/* タブ3：相関図 */}
               {activeTab === 3 && dailyData.length > 0 && (
                 <div className="space-y-12">
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
@@ -574,6 +580,7 @@ export default function SolarEdgeApp() {
                 </div>
               )}
               
+              {/* タブ4：前年同月比較 */}
               {activeTab === 4 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={yoySummaryData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
@@ -594,6 +601,7 @@ export default function SolarEdgeApp() {
                 </div>
               )}
 
+              {/* タブ5：年間:発電予実 */}
               {activeTab === 5 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={annualChartData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
@@ -608,6 +616,7 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
+              {/* タブ6：投資回収 */}
               {activeTab === 6 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={roiData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
