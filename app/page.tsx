@@ -21,7 +21,6 @@ interface DailyDataItem {
   sunlight: number;
 }
 
-// 固定シミュレーションデータ
 const SIMULATION_DATA: Record<number, number> = {
   1: 3582, 2: 4423, 3: 6061, 4: 6446, 5: 6768, 6: 5208,
   7: 6641, 8: 6996, 9: 6548, 10: 5605, 11: 4150, 12: 3637
@@ -61,6 +60,7 @@ export default function SolarEdgeApp() {
   const handlePrevMonth = () => {
     let y = parseInt(selectedYear);
     let m = parseInt(selectedMonth);
+    if (isNaN(m) || isNaN(y)) return; // 安全装置
     if (m === 1) { m = 12; y -= 1; }
     else { m -= 1; }
     setSelectedYear(y.toString());
@@ -70,6 +70,7 @@ export default function SolarEdgeApp() {
   const handleNextMonth = () => {
     let y = parseInt(selectedYear);
     let m = parseInt(selectedMonth);
+    if (isNaN(m) || isNaN(y)) return; // 安全装置
     if (m === 12) { m = 1; y += 1; }
     else { m += 1; }
     setSelectedYear(y.toString());
@@ -110,16 +111,26 @@ export default function SolarEdgeApp() {
 
         totalGenMwh += genValue; totalConsMwh += consValue; totalSolarMwh += solarValue;
 
+        // 【修正】スラッシュやハイフン、0埋め（06月など）にも対応する強力な正規表現
         if (!targetMonthStr && timeValue) {
-          const match = timeValue.match(/(\d{4})年(\d+)月/);
-          if (match) { targetYearStr = match[1]; targetMonthStr = match[2]; }
+          const match = timeValue.match(/(\d{4})[年\/\-]0?(\d{1,2})[月\/\-]?/);
+          if (match) { 
+            targetYearStr = match[1]; 
+            targetMonthStr = parseInt(match[2], 10).toString(); // "06" を "6" に変換
+          }
         }
 
         if (timeValue) {
-          const dateMatch = timeValue.split(' ')[0];
+          // X軸の表示用日付を「◯月◯日」に強制統一
+          let formattedDate = timeValue.split(' ')[0];
+          const dMatch = timeValue.match(/(\d{4})[年\/\-]0?(\d{1,2})[月\/\-]0?(\d{1,2})日?/);
+          if (dMatch) {
+            formattedDate = `${dMatch[2]}月${dMatch[3]}日`;
+          }
+
           parsedDailyData.push({
             yearMonth: `${targetYearStr}年${targetMonthStr}月`,
-            date: dateMatch.replace(/^\d{4}年/, ''),
+            date: formattedDate,
             generation: Math.round(genValue * 1000),
             consumption: Math.round(consValue * 1000),
             solarFrom: Math.round(solarValue * 1000),
@@ -127,6 +138,11 @@ export default function SolarEdgeApp() {
             sunlight: 0
           });
         }
+      }
+
+      // 【新設】安全装置：年月が取得できなかった場合はシステムを壊さずに処理を中止
+      if (!targetYearStr || !targetMonthStr) {
+        return alert("エラー：CSVから年月を正しく読み取れませんでした。データ形式をご確認ください。");
       }
 
       try {
@@ -161,6 +177,8 @@ export default function SolarEdgeApp() {
 
         if (!res.ok) throw new Error('データ保存失敗');
         alert(`🎉 インポート成功！\n\n気象庁のデータベースから牛深周辺の実測日照時間を自動取得し、データに統合しました。`);
+        
+        // 正常に取得できた場合のみ画面の表示月を更新する
         setSelectedYear(targetYearStr);
         setSelectedMonth(targetMonthStr);
         fetchSpreadsheetData();
@@ -460,7 +478,6 @@ export default function SolarEdgeApp() {
                     <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '16px', border: 'none'}} />
                     <Legend />
                     <Bar dataKey="actual" name="実績 (kWh)" fill="#3b82f6" radius={[6, 6, 0, 0]} maxBarSize={40} />
-                    {/* 【改修】ドットを追加しました */}
                     <Line type="monotone" dataKey="sim" name="シミュレーション目標" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
