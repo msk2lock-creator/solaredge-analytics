@@ -31,16 +31,15 @@ const EN_MONTH_MAP: Record<string, string> = {
   Jul: '7', Aug: '8', Sep: '9', Oct: '10', Nov: '11', Dec: '12'
 };
 
-// 【新設】ダブルクォーテーション内のカンマを無視して正確に列を分割する関数
 const parseCSVLine = (line: string) => {
   const cols = [];
   let cur = '';
   let inQuote = false;
   for (let i = 0; i < line.length; i++) {
     if (line[i] === '"') {
-      inQuote = !inQuote; // クォーテーションの中に入った/出たの判定を切り替え
+      inQuote = !inQuote;
     } else if (line[i] === ',' && !inQuote) {
-      cols.push(cur.trim()); // クォーテーションの外のカンマなら列を区切る
+      cols.push(cur.trim());
       cur = '';
     } else {
       cur += line[i];
@@ -52,7 +51,7 @@ const parseCSVLine = (line: string) => {
 
 export default function SolarEdgeApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
-  const [activeTab, setActiveTab] = useState(5); 
+  const [activeTab, setActiveTab] = useState(4); // 初期表示を「年間:発電予実」(新インデックス4)に設定
   
   const [selectedYear, setSelectedYear] = useState('2026');
   const [selectedMonth, setSelectedMonth] = useState('4');
@@ -114,7 +113,6 @@ export default function SolarEdgeApp() {
       
       if (lines.length <= 1) return alert("CSVデータが空か、構造が正しくありません。");
 
-      // 【修正】新設した正確なパーサー関数を使用する
       const headers = parseCSVLine(lines[0]);
       const timeIdx = headers.indexOf('測定時間');
       const genIdx = headers.indexOf('発電 (MWh)');
@@ -127,7 +125,6 @@ export default function SolarEdgeApp() {
       const parsedDailyData: DailyDataItem[] = [];
 
       for (let i = 1; i < lines.length; i++) {
-        // 【修正】新設した正確なパーサー関数を使用する
         const columns = parseCSVLine(lines[i]);
         if (columns.length < headers.length) continue;
 
@@ -400,50 +397,65 @@ export default function SolarEdgeApp() {
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8">
+        {/* 【改修】タブメニューを整理して「日次データ」に統合 */}
         <div className="flex flex-wrap gap-4 mb-8 border-b border-slate-100 pb-4 print:hidden">
-          {['日次:消費電力', '日次:発電/日照', '相関図', '前年同月比較', '年間:発電予実', '投資回収'].map((t, i) => (
+          {['日次データ', '相関図', '前年同月比較', '年間:発電予実', '投資回収'].map((t, i) => (
             <button key={i} onClick={() => setActiveTab(i+1)} className={`py-2 px-4 rounded-xl text-sm font-bold transition-all ${activeTab === i+1 ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-50'}`}>
               {t}
             </button>
           ))}
         </div>
 
-        <div className={`${activeTab === 3 ? 'h-auto space-y-12' : 'h-[400px]'} w-full`}>
+        <div className={`${(activeTab === 1 || activeTab === 2) ? 'h-auto space-y-12' : 'h-[400px]'} w-full`}>
           {isLoading || !mounted ? (
             <div className="h-[400px] flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
           ) : (
             <>
+              {/* 【改修】タブ1：日次消費電力（上段）と日次発電/日照（下段）を上下に並べて配置 */}
               {activeTab === 1 && dailyData.length > 0 && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
-                    <YAxis stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxCons]} />
-                    <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
-                    <Legend />
-                    <Bar dataKey="solarFrom" stackId="a" name="太陽光から (自家消費 kWh)" fill="#10b981" maxBarSize={40} />
-                    <Bar dataKey="gridFrom" stackId="a" name="系統から (買電 kWh)" fill="#f43f5e" maxBarSize={40} />
-                    <Line type="monotone" dataKey="consumption" name="総消費電力 (kWh)" stroke="#0f172a" strokeWidth={2} dot={false} />
-                  </ComposedChart>
-                </ResponsiveContainer>
+                <div className="space-y-12">
+                  {/* 上段：日次消費電力 */}
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-500 mb-4">📈 {selectedMonth}月度 日次:消費電力分析（kWh）</h3>
+                    <div className="h-[350px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
+                          <YAxis stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxCons]} />
+                          <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
+                          <Legend />
+                          <Bar dataKey="solarFrom" stackId="a" name="太陽光から (自家消費 kWh)" fill="#10b981" maxBarSize={40} />
+                          <Bar dataKey="gridFrom" stackId="a" name="系統から (買電 kWh)" fill="#f43f5e" maxBarSize={40} />
+                          <Line type="monotone" dataKey="consumption" name="総消費電力 (kWh)" stroke="#0f172a" strokeWidth={2} dot={false} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* 下段：日次発電/日照 */}
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-500 mb-4">☀️ {selectedMonth}月度 日次:発電量と日照時間の推移</h3>
+                    <div className="h-[350px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
+                          <YAxis yAxisId="left" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxGen]} />
+                          <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxSun]} />
+                          <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
+                          <Legend />
+                          <Bar yAxisId="left" dataKey="generation" name="日次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                          <Line yAxisId="right" type="monotone" dataKey="sunlight" name="日照時間 (時間)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
               )}
               
+              {/* タブ2：相関図 */}
               {activeTab === 2 && dailyData.length > 0 && (
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={dailyData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
-                    <YAxis yAxisId="left" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxGen]} />
-                    <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxSun]} />
-                    <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="generation" name="日次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                    <Line yAxisId="right" type="monotone" dataKey="sunlight" name="日照時間 (時間)" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              )}
-
-              {activeTab === 3 && dailyData.length > 0 && (
                 <div className="space-y-12">
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <h3 className="text-sm font-bold text-slate-500 mb-4">📊 {selectedMonth}月度 日次相関分析（傾向線・日付特定機能付き）</h3>
@@ -485,7 +497,8 @@ export default function SolarEdgeApp() {
                 </div>
               )}
               
-              {activeTab === 4 && (
+              {/* タブ3：前年同月比較 */}
+              {activeTab === 3 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={yoySummaryData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -499,13 +512,14 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
-              {activeTab <= 3 && dailyData.length === 0 && (
+              {activeTab <= 2 && dailyData.length === 0 && (
                 <div className="h-[400px] flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   <p className="text-slate-400 font-medium">対象月の日次データがありません。CSVをインポートしてください。</p>
                 </div>
               )}
 
-              {activeTab === 5 && (
+              {/* タブ4：年間:発電予実 */}
+              {activeTab === 4 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={annualChartData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -519,7 +533,8 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
-              {activeTab === 6 && (
+              {/* タブ5：投資回収 */}
+              {activeTab === 5 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={roiData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
