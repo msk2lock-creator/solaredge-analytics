@@ -97,7 +97,7 @@ export default function SolarEdgeApp() {
     let m = parseInt(selectedMonth);
     if (isNaN(m) || isNaN(y)) return;
     if (m === 12) { m = 1; y += 1; }
-    else { m += 1; }
+    else { m -= 1; }
     setSelectedYear(y.toString());
     setSelectedMonth(m.toString());
   };
@@ -256,6 +256,42 @@ export default function SolarEdgeApp() {
 
   const dailyData = allDailyData.filter(d => d.yearMonth === currentTargetStr);
 
+  // --- 【新設】要望②：1月〜12月の月次集計データ生成ロジック ---
+  const monthlyChartDataExtended = Array.from({ length: 12 }, (_, i) => {
+    const monthNum = i + 1;
+    const mStr = `${selectedYear}年${monthNum}月`;
+    const monthDailies = allDailyData.filter(d => d.yearMonth === mStr);
+    
+    const agg = monthDailies.reduce((acc, curr) => ({
+      generation: acc.generation + curr.generation,
+      consumption: acc.consumption + curr.consumption,
+      solarFrom: acc.solarFrom + curr.solarFrom,
+      gridFrom: acc.gridFrom + curr.gridFrom,
+      sunlight: acc.sunlight + curr.sunlight,
+    }), { generation: 0, consumption: 0, solarFrom: 0, gridFrom: 0, sunlight: 0 });
+
+    const hasData = monthDailies.length > 0;
+
+    return {
+      monthLabel: `${monthNum}月`,
+      consumption: hasData ? agg.consumption : null,
+      solarFrom: hasData ? agg.solarFrom : null,
+      gridFrom: hasData ? agg.gridFrom : null,
+      generation: hasData ? agg.generation : null,
+      sunlight: hasData ? parseFloat(agg.sunlight.toFixed(1)) : null,
+      sim: SIMULATION_DATA[monthNum]
+    };
+  });
+
+  const maxMonthlyConsumption = Math.max(0, ...monthlyChartDataExtended.map(d => d.consumption || 0));
+  const maxMonthlyGeneration = Math.max(0, ...monthlyChartDataExtended.map(d => Math.max(d.generation || 0, d.sim || 0)));
+  const maxMonthlySunlight = Math.max(0, ...monthlyChartDataExtended.map(d => d.sunlight || 0));
+
+  const yMaxMonthCons = maxMonthlyConsumption > 0 ? Math.ceil(maxMonthlyConsumption * 1.1) : 'auto';
+  const yMaxMonthGen = maxMonthlyGeneration > 0 ? Math.ceil(maxMonthlyGeneration * 1.1) : 'auto';
+  const yMaxMonthSun = maxMonthlySunlight > 0 ? Math.ceil(maxMonthlySunlight * 1.1) : 'auto';
+  // ------------------------------------------------------------
+
   const getTrendLineData = (dataList: DailyDataItem[], maxSunVal: number | 'auto') => {
     const validData = dataList.filter(d => d.sunlight > 0 && d.generation > 0);
     if (validData.length < 2) return [];
@@ -397,31 +433,31 @@ export default function SolarEdgeApp() {
       </div>
 
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8">
+        {/* 【改修】タブメニューに「月次データ」を追加 */}
         <div className="flex flex-wrap gap-4 mb-8 border-b border-slate-100 pb-4 print:hidden">
-          {['日次データ', '相関図', '前年同月比較', '年間:発電予実', '投資回収'].map((t, i) => (
+          {['日次データ', '月次データ', '相関図', '前年同月比較', '年間:発電予実', '投資回収'].map((t, i) => (
             <button key={i} onClick={() => setActiveTab(i+1)} className={`py-2 px-4 rounded-xl text-sm font-bold transition-all ${activeTab === i+1 ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-50'}`}>
               {t}
             </button>
           ))}
         </div>
 
-        <div className={`${(activeTab === 1 || activeTab === 2) ? 'h-auto space-y-12' : 'h-[400px]'} w-full`}>
+        <div className={`${(activeTab === 1 || activeTab === 2 || activeTab === 3) ? 'h-auto space-y-12' : 'h-[400px]'} w-full`}>
           {isLoading || !mounted ? (
             <div className="h-[400px] flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
           ) : (
             <>
+              {/* タブ1：日次データ */}
               {activeTab === 1 && dailyData.length > 0 && (
                 <div className="space-y-12">
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <h3 className="text-sm font-bold text-slate-500 mb-4">📈 {selectedMonth}月度 日次:消費電力分析（kWh）</h3>
                     <div className="h-[350px] w-full">
-                      {/* 【修正】syncIdを設定して下段グラフとホバーを同期し、透明なダミー右軸を置いて横幅を完全一致させる */}
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={dailyData} syncId="dailyDataSync" margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                           <XAxis dataKey="date" stroke="#94a3b8" tick={{fontSize: 12}} />
                           <YAxis yAxisId="left" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxCons]} width={55} />
-                          {/* ダミーの右軸（透明）を配置し、下段の第2軸と幅を揃える */}
                           <YAxis yAxisId="right" orientation="right" tick={false} axisLine={false} width={55} />
                           <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
                           <Legend />
@@ -436,7 +472,6 @@ export default function SolarEdgeApp() {
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <h3 className="text-sm font-bold text-slate-500 mb-4">☀️ {selectedMonth}月度 日次:発電量と日照時間の推移</h3>
                     <div className="h-[350px] w-full">
-                      {/* 【修正】上段と同じ syncId, margin, width(55) を設定 */}
                       <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={dailyData} syncId="dailyDataSync" margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -453,11 +488,55 @@ export default function SolarEdgeApp() {
                   </div>
                 </div>
               )}
-              
-              {activeTab === 2 && dailyData.length > 0 && (
+
+              {/* 【新設】タブ2：月次データ（1月〜12月並び、目標線・同期付き） */}
+              {activeTab === 2 && (
                 <div className="space-y-12">
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                    <h3 className="text-sm font-bold text-slate-500 mb-4">📊 {selectedMonth}月度 日次相関分析（傾向線・日付特定機能付き）</h3>
+                    <h3 className="text-sm font-bold text-slate-500 mb-4">📈 {selectedYear}年 月次:消費電力分析（kWh）</h3>
+                    <div className="h-[350px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={monthlyChartDataExtended} syncId="monthlyDataSync" margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="monthLabel" stroke="#94a3b8" tick={{fontSize: 12}} />
+                          <YAxis yAxisId="left" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxMonthCons]} width={55} />
+                          <YAxis yAxisId="right" orientation="right" tick={false} axisLine={false} width={55} />
+                          <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
+                          <Legend />
+                          <Bar yAxisId="left" dataKey="solarFrom" stackId="a" name="太陽光から (自家消費 kWh)" fill="#10b981" maxBarSize={40} />
+                          <Bar yAxisId="left" dataKey="gridFrom" stackId="a" name="系統から (買電 kWh)" fill="#f43f5e" maxBarSize={40} />
+                          <Line yAxisId="left" type="monotone" dataKey="consumption" name="総消費電力 (kWh)" stroke="#0f172a" strokeWidth={2} dot={{ r: 4, fill: '#0f172a', stroke: '#fff', strokeWidth: 2 }} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-500 mb-4">☀️ {selectedYear}年 月次:発電量と日照時間の推移（シミュレーション目標線付き）</h3>
+                    <div className="h-[350px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={monthlyChartDataExtended} syncId="monthlyDataSync" margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="monthLabel" stroke="#94a3b8" tick={{fontSize: 12}} />
+                          <YAxis yAxisId="left" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxMonthGen]} width={55} />
+                          <YAxis yAxisId="right" orientation="right" stroke="#94a3b8" tick={{fontSize: 12}} domain={[0, yMaxMonthSun]} width={55} />
+                          <Tooltip contentStyle={{borderRadius: '16px', border: 'none'}} />
+                          <Legend />
+                          <Bar yAxisId="left" dataKey="generation" name="月次発電量 (kWh)" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                          <Line yAxisId="left" type="monotone" dataKey="sim" name="シミュレーション目標 (kWh)" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: '#f59e0b', stroke: '#fff', strokeWidth: 2 }} />
+                          <Line yAxisId="right" type="monotone" dataKey="sunlight" name="月次総日照時間 (時間)" stroke="#eab308" strokeWidth={2} dot={{ r: 4, fill: '#eab308', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* タブ3：相関図（年間通期傾向線を上段に重ねて比較可能に改修） */}
+              {activeTab === 3 && dailyData.length > 0 && (
+                <div className="space-y-12">
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <h3 className="text-sm font-bold text-slate-500 mb-4">📊 {selectedMonth}月度 日次相関分析（赤＝当月傾向線 ／ 緑＝年間通期傾向線）</h3>
                     <div className="h-[350px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <ScatterChart margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
@@ -468,7 +547,11 @@ export default function SolarEdgeApp() {
                           <Legend />
                           <Scatter name="各日の実測値" data={dailyData} fill="#3b82f6" shape="circle" fillOpacity={0.8} />
                           {monthTrend.length > 0 && (
-                            <Line data={monthTrend} type="monotone" dataKey="trend" name="標準傾向線" stroke="#f43f5e" strokeWidth={2} dot={{ r: 5, fill: '#f43f5e', stroke: '#fff', strokeWidth: 2 }} activeDot={false} />
+                            <Line data={monthTrend} type="monotone" dataKey="trend" name="当月傾向線" stroke="#f43f5e" strokeWidth={2} dot={{ r: 5, fill: '#f43f5e', stroke: '#fff', strokeWidth: 2 }} activeDot={false} />
+                          )}
+                          {/* 【改修要望①】年間通期傾向線を点線で重ねて表示 */}
+                          {yearTrend.length > 0 && (
+                            <Line data={yearTrend} type="monotone" dataKey="trend" name="年間通期傾向線（比較用）" stroke="#10b981" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={false} />
                           )}
                         </ScatterChart>
                       </ResponsiveContainer>
@@ -496,7 +579,8 @@ export default function SolarEdgeApp() {
                 </div>
               )}
               
-              {activeTab === 3 && (
+              {/* タブ4：前年同月比較 */}
+              {activeTab === 4 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={yoySummaryData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -510,13 +594,14 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
-              {activeTab <= 2 && dailyData.length === 0 && (
+              {(activeTab === 1 || activeTab === 3) && dailyData.length === 0 && (
                 <div className="h-[400px] flex items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                  <p className="text-slate-400 font-medium">対象月の日次データがありません。CSVをインポートしてください。</p>
+                  <p className="text-slate-400 font-medium">対象データがありません。CSVをインポートしてください。</p>
                 </div>
               )}
 
-              {activeTab === 4 && (
+              {/* タブ5：年間:発電予実 */}
+              {activeTab === 5 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={annualChartData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -530,7 +615,8 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
-              {activeTab === 5 && (
+              {/* タブ6：投資回収 */}
+              {activeTab === 6 && (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={roiData} margin={{ top: 20, right: 20, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
