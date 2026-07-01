@@ -31,6 +31,25 @@ const EN_MONTH_MAP: Record<string, string> = {
   Jul: '7', Aug: '8', Sep: '9', Oct: '10', Nov: '11', Dec: '12'
 };
 
+// 【新設】ダブルクォーテーション内のカンマを無視して正確に列を分割する関数
+const parseCSVLine = (line: string) => {
+  const cols = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') {
+      inQuote = !inQuote; // クォーテーションの中に入った/出たの判定を切り替え
+    } else if (line[i] === ',' && !inQuote) {
+      cols.push(cur.trim()); // クォーテーションの外のカンマなら列を区切る
+      cur = '';
+    } else {
+      cur += line[i];
+    }
+  }
+  cols.push(cur.trim());
+  return cols;
+};
+
 export default function SolarEdgeApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const [activeTab, setActiveTab] = useState(5); 
@@ -41,10 +60,9 @@ export default function SolarEdgeApp() {
   const [monthlyData, setMonthlyData] = useState<MonthlyDataItem[]>([]);
   const [allDailyData, setAllDailyData] = useState<DailyDataItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [mounted, setMounted] = useState(false); // 【新設】ハイドレーション制限エラーを防止するマウント状態管理
+  const [mounted, setMounted] = useState(false); 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 初回マウント時にのみ実行
   useEffect(() => {
     setMounted(true);
     fetchSpreadsheetData();
@@ -96,7 +114,8 @@ export default function SolarEdgeApp() {
       
       if (lines.length <= 1) return alert("CSVデータが空か、構造が正しくありません。");
 
-      const headers = lines[0].split(',').map(h => h.replace(/"/g, ''));
+      // 【修正】新設した正確なパーサー関数を使用する
+      const headers = parseCSVLine(lines[0]);
       const timeIdx = headers.indexOf('測定時間');
       const genIdx = headers.indexOf('発電 (MWh)');
       const consIdx = headers.indexOf('消費 (MWh)');
@@ -108,7 +127,8 @@ export default function SolarEdgeApp() {
       const parsedDailyData: DailyDataItem[] = [];
 
       for (let i = 1; i < lines.length; i++) {
-        const columns = lines[i].split(',').map(c => c.replace(/"/g, ''));
+        // 【修正】新設した正確なパーサー関数を使用する
+        const columns = parseCSVLine(lines[i]);
         if (columns.length < headers.length) continue;
 
         const timeValue = columns[timeIdx];
@@ -389,7 +409,6 @@ export default function SolarEdgeApp() {
         </div>
 
         <div className={`${activeTab === 3 ? 'h-auto space-y-12' : 'h-[400px]'} w-full`}>
-          {/* 【修正】mounted状態も同時に監視。完全に画面構成の準備ができるまでフライング描画をストップ */}
           {isLoading || !mounted ? (
             <div className="h-[400px] flex items-center justify-center text-slate-400 font-medium">データを読み込み中...</div>
           ) : (
@@ -424,7 +443,6 @@ export default function SolarEdgeApp() {
                 </ResponsiveContainer>
               )}
 
-              {/* 【修正】ComposedChartの数値軸バグを避けるため、相関図（散布図）専用の「ScatterChart」コンポーネントに統一 */}
               {activeTab === 3 && dailyData.length > 0 && (
                 <div className="space-y-12">
                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
