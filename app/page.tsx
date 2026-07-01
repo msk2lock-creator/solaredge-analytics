@@ -26,6 +26,12 @@ const SIMULATION_DATA: Record<number, number> = {
   7: 6641, 8: 6996, 9: 6548, 10: 5605, 11: 4150, 12: 3637
 };
 
+// 英語の月名を数字に変換するための辞書
+const EN_MONTH_MAP: Record<string, string> = {
+  Jan: '1', Feb: '2', Mar: '3', Apr: '4', May: '5', Jun: '6',
+  Jul: '7', Aug: '8', Sep: '9', Oct: '10', Nov: '11', Dec: '12'
+};
+
 export default function SolarEdgeApp() {
   const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const [activeTab, setActiveTab] = useState(5); 
@@ -60,7 +66,7 @@ export default function SolarEdgeApp() {
   const handlePrevMonth = () => {
     let y = parseInt(selectedYear);
     let m = parseInt(selectedMonth);
-    if (isNaN(m) || isNaN(y)) return; // 安全装置
+    if (isNaN(m) || isNaN(y)) return;
     if (m === 1) { m = 12; y -= 1; }
     else { m -= 1; }
     setSelectedYear(y.toString());
@@ -70,7 +76,7 @@ export default function SolarEdgeApp() {
   const handleNextMonth = () => {
     let y = parseInt(selectedYear);
     let m = parseInt(selectedMonth);
-    if (isNaN(m) || isNaN(y)) return; // 安全装置
+    if (isNaN(m) || isNaN(y)) return;
     if (m === 12) { m = 1; y += 1; }
     else { m += 1; }
     setSelectedYear(y.toString());
@@ -111,21 +117,35 @@ export default function SolarEdgeApp() {
 
         totalGenMwh += genValue; totalConsMwh += consValue; totalSolarMwh += solarValue;
 
-        // 【修正】スラッシュやハイフン、0埋め（06月など）にも対応する強力な正規表現
+        // 年月の抽出（日本語・英語両対応）
         if (!targetMonthStr && timeValue) {
-          const match = timeValue.match(/(\d{4})[年\/\-]0?(\d{1,2})[月\/\-]?/);
-          if (match) { 
-            targetYearStr = match[1]; 
-            targetMonthStr = parseInt(match[2], 10).toString(); // "06" を "6" に変換
+          // パターン1: 2026年06月, 2026/06
+          const jpMatch = timeValue.match(/(\d{4})[年\/\-]0?(\d{1,2})[月\/\-]?/);
+          if (jpMatch) { 
+            targetYearStr = jpMatch[1]; 
+            targetMonthStr = parseInt(jpMatch[2], 10).toString();
+          } else {
+            // パターン2: "Jun 1, 2026" (英語フォーマット)
+            const enMatch = timeValue.match(/([A-Z][a-z]{2}) \d{1,2}, (\d{4})/);
+            if (enMatch && EN_MONTH_MAP[enMatch[1]]) {
+              targetYearStr = enMatch[2];
+              targetMonthStr = EN_MONTH_MAP[enMatch[1]];
+            }
           }
         }
 
         if (timeValue) {
-          // X軸の表示用日付を「◯月◯日」に強制統一
-          let formattedDate = timeValue.split(' ')[0];
-          const dMatch = timeValue.match(/(\d{4})[年\/\-]0?(\d{1,2})[月\/\-]0?(\d{1,2})日?/);
-          if (dMatch) {
-            formattedDate = `${dMatch[2]}月${dMatch[3]}日`;
+          let formattedDate = timeValue.split(' ')[0]; // デフォルトフォールバック
+          
+          // 日付の抽出と整形
+          const jpDateMatch = timeValue.match(/(\d{4})[年\/\-]0?(\d{1,2})[月\/\-]0?(\d{1,2})日?/);
+          if (jpDateMatch) {
+            formattedDate = `${jpDateMatch[2]}月${jpDateMatch[3]}日`;
+          } else {
+            const enDateMatch = timeValue.match(/([A-Z][a-z]{2}) (\d{1,2}), \d{4}/);
+            if (enDateMatch && EN_MONTH_MAP[enDateMatch[1]]) {
+              formattedDate = `${EN_MONTH_MAP[enDateMatch[1]]}月${enDateMatch[2]}日`;
+            }
           }
 
           parsedDailyData.push({
@@ -140,7 +160,6 @@ export default function SolarEdgeApp() {
         }
       }
 
-      // 【新設】安全装置：年月が取得できなかった場合はシステムを壊さずに処理を中止
       if (!targetYearStr || !targetMonthStr) {
         return alert("エラー：CSVから年月を正しく読み取れませんでした。データ形式をご確認ください。");
       }
@@ -178,7 +197,6 @@ export default function SolarEdgeApp() {
         if (!res.ok) throw new Error('データ保存失敗');
         alert(`🎉 インポート成功！\n\n気象庁のデータベースから牛深周辺の実測日照時間を自動取得し、データに統合しました。`);
         
-        // 正常に取得できた場合のみ画面の表示月を更新する
         setSelectedYear(targetYearStr);
         setSelectedMonth(targetMonthStr);
         fetchSpreadsheetData();
